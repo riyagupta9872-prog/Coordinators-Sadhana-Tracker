@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sadhana Tracker 2026 | Senior Youth</title>
+    <title>Sadhana Tracker 2026</title>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
@@ -12,115 +12,101 @@
 <body>
     <div class="container">
         <section id="auth-section" class="card">
-            <h2 style="text-align:center;">Senior Youth Tracker</h2>
-            <div class="input-group">
-                <label>Email Address</label>
-                <input type="email" id="login-email" placeholder="e.g. devotee@gmail.com">
-            </div>
-            <div class="input-group">
-                <label>Password</label>
-                <input type="password" id="login-password" placeholder="Enter your password">
-            </div>
-            <button id="login-btn">Secure Login</button>
+            <h2>Sadhana Login</h2>
+            <input type="email" id="login-email" placeholder="Devotee Email">
+            <input type="password" id="login-password" placeholder="Password">
+            <button id="login-btn">Login</button>
         </section>
 
         <section id="profile-section" class="card hidden">
-            <h2>User Profile Settings</h2>
-            <label>Display Name</label>
-            <input type="text" id="profile-name" placeholder="Your Spiritual Name / Full Name">
+            <h2>Profile Setup</h2>
+            <label>Name</label>
+            <input type="text" id="profile-name" placeholder="Full Name">
             
-            <label>Current Position</label>
-            <select id="profile-position">
-                <option value="Senior Batch">Senior Batch</option>
-                <option value="IGF Coordinator">IGF Coordinator</option>
-                <option value="Overall Coordinator">Overall Coordinator</option>
-            </select>
-
-            <label>Assigned Level (Classification Only)</label>
-            <select id="profile-level">
-                <option value="Level 1">Level 1</option>
-                <option value="Level 2">Level 2</option>
-                <option value="Level 3">Level 3</option>
-                <option value="Level 4">Level 4</option>
-            </select>
-
-            <label>Daily Chanting Rounds Target</label>
-            <input type="number" id="profile-rounds" placeholder="e.g. 16">
-
-            <div style="background: #fdf2f2; padding: 15px; border-radius: 8px; margin-top: 20px;">
-                <label>Change Account Password</label>
-                <input type="password" id="new-password" placeholder="Leave blank to keep current">
-                <button id="update-pass-btn" style="background:#e74c3c; font-size: 12px;">Update Password Now</button>
+            <div class="grid">
+                <div>
+                    <label>Position</label>
+                    <select id="profile-position">
+                        <option value="Senior Batch">Senior Batch</option>
+                        <option value="IGF Coordinator">IGF Coordinator</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Level</label>
+                    <select id="profile-level">
+                        <option value="Level 1">Level 1</option>
+                        <option value="Level 2">Level 2</option>
+                        <option value="Level 3">Level 3</option>
+                        <option value="Level 4">Level 4</option>
+                    </select>
+                </div>
             </div>
 
-            <button id="save-profile-btn" style="margin-top: 20px; background: #27ae60;">Save All Changes</button>
-            <button id="cancel-profile-btn" class="hidden" style="background:#95a5a6">Cancel</button>
+            <label>Target Rounds</label>
+            <input type="number" id="profile-rounds" placeholder="e.g. 16">
+
+            <label>Update Password (Optional)</label>
+            <input type="password" id="new-password" placeholder="Leave blank to skip">
+
+            <button id="save-profile-btn" style="background:var(--success)">Save & Continue</button>
         </section>
 
         <section id="dashboard-section" class="hidden">
-            <div class="header card">
+            <div class="card" style="padding:15px; display:flex; justify-content:space-between; align-items:center;">
                 <div>
-                    <strong id="user-display-name">...</strong><br>
-                    <span id="user-level-badge" style="font-size: 12px; color: #7f8c8d;"></span>
-                    <a href="#" id="edit-profile-link" style="display:block; margin-top:5px; font-size:12px; color:#3498db;">Edit Profile</a>
+                    <strong id="user-display-name"></strong><br>
+                    <small id="user-meta" style="color: #888;"></small>
                 </div>
-                <button id="logout-btn" style="width:auto; background:#e74c3c;">Logout</button>
+                <button id="edit-profile-btn" style="width:auto; font-size:11px; background:#95a5a6; padding:5px 10px;">Edit</button>
             </div>
 
             <div class="nav-tabs">
-                <button class="tab-btn active" id="tab-entry">Entry</button>
-                <button class="tab-btn" id="tab-reports">Reports</button>
-                <button class="tab-btn hidden" id="tab-admin">Admin</button>
+                <button class="tab-btn active" id="tab-btn-entry">Entry</button>
+                <button class="tab-btn" id="tab-btn-reports">History</button>
+                <button class="tab-btn hidden" id="tab-btn-admin">Admin</button>
             </div>
 
             <div id="entry-tab" class="tab-content">
-                <div class="card">
-                    <form id="sadhana-form">
-                        <label>Sadhana Date</label>
-                        <select id="sadhana-date"></select>
+                <form id="sadhana-form" class="card">
+                    <label>Sadhana Date</label>
+                    <select id="sadhana-date"></select>
 
-                        <div class="grid">
-                            <div><label>Sleep (Yesterday)</label><input type="time" id="sleep-time" required></div>
-                            <div><label>Wakeup Time</label><input type="time" id="wakeup-time" required></div>
-                        </div>
+                    <div class="grid">
+                        <div><label>Sleep Time</label><input type="time" id="sleep-time" required></div>
+                        <div><label>Wakeup</label><input type="time" id="wakeup-time" required></div>
+                    </div>
 
-                        <label>Last Chanting Round Finished By</label>
-                        <input type="time" id="chanting-time" required>
+                    <label>Chanting Finished By</label>
+                    <input type="time" id="chanting-time" required>
 
-                        <div class="grid">
-                            <div><label>Reading (Mins)</label><input type="number" id="reading-mins" placeholder="e.g. 30" required></div>
-                            <div><label>Hearing (Mins)</label><input type="number" id="hearing-mins" placeholder="e.g. 20" required></div>
-                        </div>
+                    <div class="grid">
+                        <div><label>Read (Mins)</label><input type="number" id="read-mins" value="0"></div>
+                        <div><label>Hear (Mins)</label><input type="number" id="hear-mins" value="0"></div>
+                    </div>
 
-                        <label>Physical/Mental Service (Mins)</label>
-                        <input type="number" id="service-mins" placeholder="e.g. 15" required>
+                    <div id="notes-group" class="hidden">
+                        <label>Notes Revision (Mins)</label>
+                        <input type="number" id="notes-mins" value="0">
+                    </div>
 
-                        <div id="notes-group" class="hidden">
-                            <label>Notes Revision (Mins)</label>
-                            <input type="number" id="notes-mins" placeholder="Revision of lectures">
-                        </div>
+                    <label>Service (Mins)</label>
+                    <input type="number" id="serv-mins" value="0">
 
-                        <label>Day Sleep (Mins)</label>
-                        <input type="number" id="day-sleep-mins" value="0">
+                    <label>Day Sleep (Mins)</label>
+                    <input type="number" id="day-sleep" value="0">
 
-                        <button type="submit" style="background:#27ae60; margin-top:15px;">Submit Today's Score</button>
-                    </form>
-                </div>
+                    <button type="submit" style="background:var(--success)">Submit Daily Score</button>
+                    <button id="logout-btn" style="background:var(--danger); margin-top:10px; font-size:12px;">Logout</button>
+                </form>
             </div>
 
             <div id="reports-tab" class="tab-content hidden">
-                <div id="user-history-list"></div>
+                <div id="reports-list"></div>
             </div>
 
             <div id="admin-tab" class="tab-content hidden">
-                <div class="card">
-                    <h3>Comparative Scores (Today)</h3>
-                    <div id="admin-logs-list"></div>
-                </div>
-                <div class="card">
-                    <h3>User Management</h3>
-                    <div id="admin-user-list"></div>
-                </div>
+                <h3>Admin Comparative View</h3>
+                <div id="admin-list"></div>
             </div>
         </section>
     </div>
