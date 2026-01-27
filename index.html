@@ -3,91 +3,123 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sadhana Tracker Official</title>
+    <title>Sadhana Tracker 2026 | Senior Youth</title>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
-    <style>
-        :root { --primary: #2c3e50; --secondary: #3498db; --success: #27ae60; --danger: #e74c3c; --light: #f4f7f6; --white: #ffffff; }
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--light); margin: 0; padding: 0; }
-        .container { max-width: 900px; margin: 0 auto; padding: 20px; }
-        .hidden { display: none !important; }
-        .card { background: var(--white); padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); margin-bottom: 20px; }
-        input, select, button { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
-        button { background: var(--secondary); color: white; border: none; cursor: pointer; font-weight: 600; transition: 0.3s; }
-        button:hover { opacity: 0.9; }
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding: 15px; background: white; border-radius: 8px; }
-        .nav-tabs { display: flex; gap: 10px; margin-bottom: 20px; }
-        .tab-btn { background: #eee; color: #666; padding: 10px 20px; border-radius: 20px; width: auto; }
-        .tab-btn.active { background: var(--secondary); color: white; }
-        .report-item { border-bottom: 1px solid #eee; padding: 10px 0; display: flex; justify-content: space-between; }
-    </style>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="container">
         <section id="auth-section" class="card">
-            <h2 style="text-align:center;">Sadhana Tracker Login</h2>
-            <input type="email" id="login-email" placeholder="Email">
-            <input type="password" id="login-password" placeholder="Password">
-            <button id="login-btn">Login</button>
+            <h2 style="text-align:center;">Senior Youth Tracker</h2>
+            <div class="input-group">
+                <label>Email Address</label>
+                <input type="email" id="login-email" placeholder="e.g. devotee@gmail.com">
+            </div>
+            <div class="input-group">
+                <label>Password</label>
+                <input type="password" id="login-password" placeholder="Enter your password">
+            </div>
+            <button id="login-btn">Secure Login</button>
         </section>
 
         <section id="profile-section" class="card hidden">
-            <h2 id="profile-title">Profile Settings</h2>
-            <input type="text" id="profile-name" placeholder="Full Name">
+            <h2>User Profile Settings</h2>
+            <label>Display Name</label>
+            <input type="text" id="profile-name" placeholder="Your Spiritual Name / Full Name">
+            
+            <label>Current Position</label>
             <select id="profile-position">
-                <option value="">Select Position</option>
                 <option value="Senior Batch">Senior Batch</option>
                 <option value="IGF Coordinator">IGF Coordinator</option>
                 <option value="Overall Coordinator">Overall Coordinator</option>
             </select>
-            <input type="number" id="profile-rounds" placeholder="Current Chanting Rounds">
-            <button id="save-profile-btn">Save Profile</button>
-            <button onclick="showSection('dashboard')" id="cancel-profile" class="hidden" style="background:#95a5a6">Cancel</button>
+
+            <label>Assigned Level (Classification Only)</label>
+            <select id="profile-level">
+                <option value="Level 1">Level 1</option>
+                <option value="Level 2">Level 2</option>
+                <option value="Level 3">Level 3</option>
+                <option value="Level 4">Level 4</option>
+            </select>
+
+            <label>Daily Chanting Rounds Target</label>
+            <input type="number" id="profile-rounds" placeholder="e.g. 16">
+
+            <div style="background: #fdf2f2; padding: 15px; border-radius: 8px; margin-top: 20px;">
+                <label>Change Account Password</label>
+                <input type="password" id="new-password" placeholder="Leave blank to keep current">
+                <button id="update-pass-btn" style="background:#e74c3c; font-size: 12px;">Update Password Now</button>
+            </div>
+
+            <button id="save-profile-btn" style="margin-top: 20px; background: #27ae60;">Save All Changes</button>
+            <button id="cancel-profile-btn" class="hidden" style="background:#95a5a6">Cancel</button>
         </section>
 
         <section id="dashboard-section" class="hidden">
-            <div class="header">
+            <div class="header card">
                 <div>
-                    <strong id="user-display-name"></strong><br>
-                    <button onclick="openEditProfile()" style="width:auto; padding:4px 10px; font-size:11px; background:#95a5a6;">Edit Profile</button>
+                    <strong id="user-display-name">...</strong><br>
+                    <span id="user-level-badge" style="font-size: 12px; color: #7f8c8d;"></span>
+                    <a href="#" id="edit-profile-link" style="display:block; margin-top:5px; font-size:12px; color:#3498db;">Edit Profile</a>
                 </div>
-                <button id="logout-btn" style="width:auto; background:var(--danger)">Logout</button>
+                <button id="logout-btn" style="width:auto; background:#e74c3c;">Logout</button>
             </div>
 
             <div class="nav-tabs">
-                <button class="tab-btn active" onclick="switchTab('entry')">Daily Entry</button>
-                <button class="tab-btn" onclick="switchTab('reports')">My Reports</button>
-                <button class="tab-btn hidden" id="admin-tab-btn" onclick="switchTab('admin')">Admin Panel</button>
+                <button class="tab-btn active" id="tab-entry">Entry</button>
+                <button class="tab-btn" id="tab-reports">Reports</button>
+                <button class="tab-btn hidden" id="tab-admin">Admin</button>
             </div>
 
             <div id="entry-tab" class="tab-content">
                 <div class="card">
                     <form id="sadhana-form">
-                        <label>Date:</label><select id="sadhana-date"></select>
-                        <label>Bed Time:</label><input type="time" id="sleep-time" required>
-                        <label>Wake Up:</label><input type="time" id="wakeup-time" required>
-                        <label>Chanting Finished By:</label><input type="time" id="chanting-time" required>
-                        <label>Reading (Mins):</label><input type="number" id="reading-mins" value="0">
-                        <label>Hearing (Mins):</label><input type="number" id="hearing-mins" value="0">
-                        <label>Service (Mins):</label><input type="number" id="service-mins" value="0">
-                        <div id="notes-group" class="hidden">
-                            <label>Notes Revision (Mins):</label><input type="number" id="notes-mins" value="0">
+                        <label>Sadhana Date</label>
+                        <select id="sadhana-date"></select>
+
+                        <div class="grid">
+                            <div><label>Sleep (Yesterday)</label><input type="time" id="sleep-time" required></div>
+                            <div><label>Wakeup Time</label><input type="time" id="wakeup-time" required></div>
                         </div>
-                        <label>Day Sleep (Mins):</label><input type="number" id="day-sleep-mins" value="0">
-                        <button type="submit" style="background:var(--success)">Submit Sadhana</button>
+
+                        <label>Last Chanting Round Finished By</label>
+                        <input type="time" id="chanting-time" required>
+
+                        <div class="grid">
+                            <div><label>Reading (Mins)</label><input type="number" id="reading-mins" placeholder="e.g. 30" required></div>
+                            <div><label>Hearing (Mins)</label><input type="number" id="hearing-mins" placeholder="e.g. 20" required></div>
+                        </div>
+
+                        <label>Physical/Mental Service (Mins)</label>
+                        <input type="number" id="service-mins" placeholder="e.g. 15" required>
+
+                        <div id="notes-group" class="hidden">
+                            <label>Notes Revision (Mins)</label>
+                            <input type="number" id="notes-mins" placeholder="Revision of lectures">
+                        </div>
+
+                        <label>Day Sleep (Mins)</label>
+                        <input type="number" id="day-sleep-mins" value="0">
+
+                        <button type="submit" style="background:#27ae60; margin-top:15px;">Submit Today's Score</button>
                     </form>
                 </div>
             </div>
 
             <div id="reports-tab" class="tab-content hidden">
-                <div class="card" id="user-history"></div>
+                <div id="user-history-list"></div>
             </div>
 
             <div id="admin-tab" class="tab-content hidden">
                 <div class="card">
-                    <h3>Position-wise Summary</h3>
-                    <div id="admin-data"></div>
+                    <h3>Comparative Scores (Today)</h3>
+                    <div id="admin-logs-list"></div>
+                </div>
+                <div class="card">
+                    <h3>User Management</h3>
+                    <div id="admin-user-list"></div>
                 </div>
             </div>
         </section>
