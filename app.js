@@ -12,26 +12,16 @@ const auth = firebase.auth(), db = firebase.firestore();
 const APP_ID = "App1_SeniorYouth_2026"; 
 let currentUser = null, userProfile = null;
 
-// --- TIME CALCULATOR (Late Night Fix) ---
-const t2m = (t, isS = false) => { 
-    if(!t) return 9999; 
-    let [h,m] = t.split(':').map(Number); 
-    if(isS && h<=3) h+=24; // 1 AM becomes 25:00
-    return h*60+m; 
-};
+const t2m = (t, isS = false) => { if(!t) return 9999; let [h,m] = t.split(':').map(Number); if(isS && h<=3) h+=24; return h*60+m; };
 
-// --- SCORING (Locked Rules) ---
 function calculateScore(d, pos) {
     let sc = { sleep:-5, wakeup:-5, chanting:-5, reading:-5, hearing:-5, service:-5, notes:0, daySleep:0 };
     const s = t2m(d.sleepTime, true);
     if(s<=1350) sc.sleep=25; else if(s<=1375) sc.sleep=Math.max(0, 25-(s-1350)); else sc.sleep=-5;
-    
     const w = t2m(d.wakeupTime);
     if(w<=305) sc.wakeup=25; else if(w<=330) sc.wakeup=Math.max(0, 25-(w-305)); else sc.wakeup=-5;
-    
     const c = t2m(d.chantingTime);
     if(c<=540) sc.chanting=25; else if(c<=1140) sc.chanting=Math.max(0, 25-Math.floor((c-540)/30)*5); else sc.chanting=-5;
-    
     sc.daySleep = d.daySleepMins <= 60 ? 10 : -5;
 
     if(pos === "Senior Batch") {
@@ -47,113 +37,98 @@ function calculateScore(d, pos) {
     return { total: Object.values(sc).reduce((a,b)=>a+b,0), breakdown: sc };
 }
 
-// --- AUTH STATE ---
+// --- AUTH & INITIALIZATION ---
 auth.onAuthStateChanged(async (user) => {
     if (user) {
         currentUser = user;
         const doc = await db.collection('users').doc(user.uid).get();
-        if (doc.exists) {
+        if (doc.exists && doc.data().position) {
             userProfile = doc.data();
             document.getElementById('user-display-name').innerText = userProfile.name;
-            
-            // ADMIN TAB VISIBILITY FIX
-            if(userProfile.role === 'admin') {
-                document.getElementById('admin-tab-btn').classList.remove('hidden');
-            }
-            
-            if(userProfile.position === 'Senior Batch') {
-                document.getElementById('notes-group').classList.remove('hidden');
-            }
+            document.getElementById('user-level-badge').innerText = `${userProfile.position} | ${userProfile.level}`;
+            if(userProfile.role === 'admin') document.getElementById('tab-admin').classList.remove('hidden');
+            if(userProfile.position === 'Senior Batch') document.getElementById('notes-group').classList.remove('hidden');
             setupDashboard();
         } else { showSection('profile'); }
     } else { showSection('auth'); }
 });
 
-// --- NAVIGATION & TABS ---
-function showSection(id) {
-    document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
-    document.getElementById(id + '-section').classList.remove('hidden');
-}
+// --- ACTIONS ---
+document.getElementById('login-btn').onclick = () => {
+    auth.signInWithEmailAndPassword(document.getElementById('login-email').value, document.getElementById('login-password').value).catch(e => alert(e.message));
+};
 
-function switchTab(tabId) {
-    document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.getElementById(tabId + '-tab').classList.remove('hidden');
-    document.getElementById('tab-' + tabId).classList.add('active');
-    if(tabId === 'reports') loadReports();
-    if(tabId === 'admin') loadAdmin();
-}
-
-// --- BUTTONS ---
-document.getElementById('login-btn').addEventListener('click', () => {
-    const e = document.getElementById('login-email').value;
-    const p = document.getElementById('login-password').value;
-    auth.signInWithEmailAndPassword(e, p).catch(err => alert("Login Failed: " + err.message));
-});
-
-document.getElementById('logout-btn').addEventListener('click', () => auth.signOut().then(() => location.reload()));
-
-document.getElementById('edit-profile-link').addEventListener('click', (e) => {
-    e.preventDefault();
-    showSection('profile');
-    document.getElementById('profile-name').value = userProfile.name || "";
-    document.getElementById('profile-position').value = userProfile.position || "Senior Batch";
-    document.getElementById('profile-rounds').value = userProfile.rounds || 0;
-    document.getElementById('cancel-profile-btn').classList.remove('hidden');
-});
-
-document.getElementById('save-profile-btn').addEventListener('click', async () => {
-    const newPass = document.getElementById('new-password').value;
-    if(newPass) await auth.currentUser.updatePassword(newPass).catch(e => alert("Password error: " + e.message));
-    
-    await db.collection('users').doc(currentUser.uid).set({
+document.getElementById('save-profile-btn').onclick = async () => {
+    const data = {
         name: document.getElementById('profile-name').value,
         position: document.getElementById('profile-position').value,
+        level: document.getElementById('profile-level').value,
         rounds: document.getElementById('profile-rounds').value,
-        app_id: APP_ID // Yahan update hoga taaki naya logic chale
-    }, {merge: true});
-    alert("Profile Updated!");
+        app_id: APP_ID
+    };
+    await db.collection('users').doc(currentUser.uid).set(data, {merge: true});
     location.reload();
-});
+};
 
-document.getElementById('cancel-profile-btn').addEventListener('click', () => showSection('dashboard'));
+document.getElementById('update-pass-btn').onclick = async () => {
+    const p = document.getElementById('new-password').value;
+    if(!p) return alert("Enter new password");
+    await auth.currentUser.updatePassword(p).then(() => alert("Password Updated!")).catch(e => alert(e.message));
+};
 
-// Tab Event Listeners
-document.getElementById('tab-entry').addEventListener('click', () => switchTab('entry'));
-document.getElementById('tab-reports').addEventListener('click', () => switchTab('reports'));
-document.getElementById('tab-admin').addEventListener('click', () => switchTab('admin'));
+document.getElementById('logout-btn').onclick = () => auth.signOut().then(() => location.reload());
 
-// --- DATA LOADING ---
-async function loadReports() {
-    // Ye purana data bhi dikhayega (kyuki UID same hai)
-    const snap = await db.collection('sadhana_logs')
-                   .where('uid','==',currentUser.uid)
-                   .orderBy('date','desc').limit(15).get();
-    let html = '';
-    snap.forEach(doc => {
-        const d = doc.data();
-        html += `<div style="border-bottom:1px solid #eee; padding:10px; display:flex; justify-content:space-between;">
-                    <span>${d.date}</span>
-                    <strong style="color:#2c3e50;">Score: ${d.totalScore}</strong>
-                 </div>`;
-    });
-    document.getElementById('user-history-list').innerHTML = html || "No records found.";
+document.getElementById('edit-profile-link').onclick = () => {
+    showSection('profile');
+    document.getElementById('profile-name').value = userProfile.name;
+    document.getElementById('profile-position').value = userProfile.position;
+    document.getElementById('profile-level').value = userProfile.level || "Level 1";
+    document.getElementById('profile-rounds').value = userProfile.rounds || 0;
+    document.getElementById('cancel-profile-btn').classList.remove('hidden');
+};
+
+// --- TABS & DATA ---
+function switchTab(t) {
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById(t + '-tab').classList.remove('hidden');
+    document.getElementById('tab-' + t).classList.add('active');
+    if(t === 'reports') loadUserReports();
+    if(t === 'admin') { loadAdminComparative(); loadUserManagement(); }
 }
 
-async function loadAdmin() {
-    // Admin pure project ka data dekhega
-    const snap = await db.collection('sadhana_logs')
-                   .orderBy('date','desc').limit(50).get();
-    let html = '<table style="width:100%; font-size:13px; border-collapse:collapse;"><tr style="background:#eee;"><th>Name</th><th>Score</th><th>Date</th></tr>';
+document.getElementById('tab-entry').onclick = () => switchTab('entry');
+document.getElementById('tab-reports').onclick = () => switchTab('reports');
+document.getElementById('tab-admin').onclick = () => switchTab('admin');
+
+async function loadUserReports() {
+    const snap = await db.collection('sadhana_logs').where('uid','==',currentUser.uid).orderBy('date','desc').limit(15).get();
+    let html = '<h3>Your Scores</h3>';
     snap.forEach(doc => {
         const d = doc.data();
-        html += `<tr style="border-bottom:1px solid #ddd;">
-                    <td style="padding:8px;">${d.userName || 'Unknown'}</td>
-                    <td style="padding:8px;">${d.totalScore}</td>
-                    <td style="padding:8px;">${d.date}</td>
-                 </tr>`;
+        html += `<div class="card report-item" style="margin-bottom:10px;"><b>${d.date}</b>: Score ${d.totalScore}</div>`;
+    });
+    document.getElementById('user-history-list').innerHTML = html;
+}
+
+async function loadAdminComparative() {
+    const snap = await db.collection('sadhana_logs').where('app_id','==',APP_ID).orderBy('date','desc').limit(50).get();
+    let html = '<table style="width:100%; border-collapse:collapse;"><tr><th>Date</th><th>Name</th><th>Pos</th><th>Score</th></tr>';
+    snap.forEach(doc => {
+        const d = doc.data();
+        html += `<tr><td>${d.date}</td><td>${d.userName}</td><td>${d.position}</td><td>${d.totalScore}</td></tr>`;
     });
     document.getElementById('admin-logs-list').innerHTML = html + '</table>';
+}
+
+async function loadUserManagement() {
+    const snap = await db.collection('users').where('app_id','==',APP_ID).get();
+    let html = '<table style="width:100%; border-collapse:collapse;"><tr><th>Name</th><th>Role</th><th>Level</th></tr>';
+    snap.forEach(doc => {
+        const d = doc.data();
+        html += `<tr><td>${d.name}</td><td>${d.role || 'user'}</td><td>${d.level}</td></tr>`;
+    });
+    document.getElementById('admin-user-list').innerHTML = html + '</table>';
 }
 
 document.getElementById('sadhana-form').onsubmit = async (e) => {
@@ -170,17 +145,10 @@ document.getElementById('sadhana-form').onsubmit = async (e) => {
     };
     const res = calculateScore(data, userProfile.position);
     const date = document.getElementById('sadhana-date').value;
-    
     await db.collection('sadhana_logs').doc(currentUser.uid + "_" + date).set({
-        ...data, 
-        totalScore: res.total, 
-        uid: currentUser.uid, 
-        userName: userProfile.name, 
-        position: userProfile.position, 
-        date, 
-        app_id: APP_ID
+        ...data, totalScore: res.total, uid: currentUser.uid, userName: userProfile.name, position: userProfile.position, date, app_id: APP_ID
     });
-    alert("Hare Krishna! Saved. Score: " + res.total);
+    alert("Saved Score: " + res.total);
 };
 
 function setupDashboard() {
@@ -192,4 +160,9 @@ function setupDashboard() {
         let iso = d.toISOString().split('T')[0];
         s.innerHTML += `<option value="${iso}">${iso}</option>`;
     }
+}
+
+function showSection(id) {
+    document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
+    document.getElementById(id + '-section').classList.remove('hidden');
 }
