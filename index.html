@@ -3,142 +3,97 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sadhana Tracker Official</title>
+    <title>Sadhana Tracker | 2026 Official</title>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
-    <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
-    <style>
-        :root { --primary: #2c3e50; --secondary: #3498db; --success: #27ae60; --danger: #e74c3c; --light: #f4f7f6; --white: #ffffff; }
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--light); margin: 0; padding: 0; }
-        .container { max-width: 1000px; margin: 0 auto; padding: 20px; }
-        .hidden { display: none !important; }
-        .card { background: var(--white); padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); margin-bottom: 20px; }
-        input, select, button { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
-        button { background: var(--secondary); color: white; border: none; cursor: pointer; font-weight: 600; transition: 0.3s; }
-        button:hover { opacity: 0.9; }
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding: 15px; background: white; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-        .nav-tabs { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
-        .tab-btn { background: #eee; color: #666; padding: 10px 20px; border-radius: 20px; width: auto; }
-        .tab-btn.active { background: var(--secondary); color: white; }
-        .input-group { display: flex; gap: 10px; }
-        .input-group input { flex: 1; }
-        .admin-table { width: 100%; border-collapse: collapse; margin-top: 15px; background: white; font-size: 13px; }
-        .admin-table th, .admin-table td { border: 1px solid #ddd; padding: 10px; text-align: center; }
-        .admin-table th { background: #f8f9fa; }
-        .week-card { background: white; margin-bottom: 10px; border-radius: 8px; border-left: 5px solid var(--secondary); box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-        .week-header { padding: 15px; cursor: pointer; display: flex; justify-content: space-between; font-weight: bold; }
-        .week-content { padding: 15px; border-top: 1px solid #eee; }
-        .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; justify-content: center; align-items: center; z-index: 1000; }
-        .modal-content { background: white; width: 95%; max-width: 900px; padding: 25px; border-radius: 12px; max-height: 90vh; overflow-y: auto; position: relative; }
-    </style>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="container">
-        <section id="auth-section" class="card">
-            <h2 style="text-align:center;">Sadhana Tracker</h2>
-            <form id="login-form">
-                <input type="email" id="login-email" placeholder="Email" required>
-                <input type="password" id="login-password" placeholder="Password" required>
-                <button type="submit">Login</button>
-            </form>
+    <div id="app">
+        <section id="auth-section" class="container">
+            <div class="card">
+                <h2>Sadhana Login</h2>
+                <input type="email" id="login-email" placeholder="Email">
+                <input type="password" id="login-password" placeholder="Password">
+                <button id="login-btn">Login</button>
+            </div>
         </section>
 
-        <section id="profile-section" class="card hidden">
-            <h2 id="profile-title">Complete Your Profile</h2>
-            <form id="profile-form">
-                <input type="text" id="profile-name" placeholder="Full Name" required>
-                <select id="profile-chanting" required>
-                    <option value="">Select Category</option>
-                    <option value="Level-1">Level-1 (0-4 Rounds)</option>
-                    <option value="Level-2">Level-2 (5-8 Rounds)</option>
-                    <option value="Level-3">Level-3 (9-16 Rounds)</option>
-                    <option value="Level-4">Level-4 (16+ Rounds Coordinator)</option>
+        <section id="profile-section" class="container hidden">
+            <div class="card">
+                <h2>Setup Your Position</h2>
+                <input type="text" id="profile-name" placeholder="Your Full Name">
+                <select id="profile-position">
+                    <option value="">-- Select Your Role --</option>
+                    <option value="Senior Batch">Senior Batch</option>
+                    <option value="IGF Coordinator">IGF Coordinator</option>
+                    <option value="Overall Coordinator">Overall Coordinator</option>
                 </select>
-                <input type="number" id="profile-exact-rounds" placeholder="Current Exact Rounds" required>
-                <button type="submit">Save Profile</button>
-                <button type="button" onclick="showSection('dashboard')" id="cancel-edit" class="hidden" style="background:#95a5a6">Cancel</button>
-            </form>
+                <button id="save-profile-btn">Start My Tracker</button>
+            </div>
         </section>
 
         <section id="dashboard-section" class="hidden">
-            <div class="header">
-                <div>
-                    <strong id="user-display-name"></strong>
-                    <br><button onclick="openProfileEdit()" style="width:auto; padding:2px 10px; font-size:11px; margin-top:5px; background: #95a5a6;">Edit Profile</button>
+            <header>
+                <div class="user-info">
+                    <span id="user-display-name"></span>
+                    <button id="logout-btn">Logout</button>
                 </div>
-                <button id="logout-btn" style="width:auto; padding:8px 20px; background:var(--danger)">Logout</button>
+            </header>
+
+            <div class="tabs">
+                <button class="tab-btn active" data-tab="entry">Daily Entry</button>
+                <button class="tab-btn" data-tab="admin" id="admin-tab-btn" style="display:none;">Admin View</button>
             </div>
 
-            <div class="nav-tabs">
-                <button class="tab-btn active" onclick="switchTab('sadhana')">Daily Entry</button>
-                <button class="tab-btn" onclick="switchTab('reports')">My Reports</button>
-                <button class="tab-btn hidden" id="admin-tab-btn" onclick="switchTab('admin')">Admin Panel</button>
+            <div id="entry-tab" class="tab-content active">
+                <form id="sadhana-form">
+                    <div class="form-group">
+                        <label>Date</label>
+                        <select id="sadhana-date"></select>
+                    </div>
+                    <div class="form-group">
+                        <label>Sleep (Yesterday)</label>
+                        <input type="time" id="sleep-time" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Wake Up</label>
+                        <input type="time" id="wakeup-time" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Chanting (Last Round)</label>
+                        <input type="time" id="chanting-time" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Reading (Mins)</label>
+                        <input type="number" id="reading-mins" value="0">
+                    </div>
+                    <div class="form-group">
+                        <label>Hearing (Mins)</label>
+                        <input type="number" id="hearing-mins" value="0">
+                    </div>
+                    <div class="form-group">
+                        <label>Service (Mins)</label>
+                        <input type="number" id="service-mins" value="0">
+                    </div>
+                    <div class="form-group hidden" id="notes-group">
+                        <label>Notes Revision (Mins)</label>
+                        <input type="number" id="notes-mins" value="0">
+                    </div>
+                    <div class="form-group">
+                        <label>Day Sleep (Mins)</label>
+                        <input type="number" id="day-sleep-mins" value="0">
+                    </div>
+                    <button type="submit" id="submit-btn">Submit Today's Score</button>
+                </form>
             </div>
 
-            <div id="sadhana-tab" class="tab-content">
-                <div class="card">
-                    <form id="sadhana-form">
-                        <label>Date:</label><select id="sadhana-date" required></select>
-                        <label>Bed Time (Yesterday):</label><input type="time" id="sleep-time" required>
-                        <label>Wake Up Time:</label><input type="time" id="wakeup-time" required>
-                        <label>Chanting (Last round by):</label><input type="time" id="chanting-time" required>
-                        
-                        <label>Reading (Pathan):</label>
-                        <div class="input-group">
-                            <input type="number" id="reading-hrs" placeholder="Hrs" required min="0" value="0">
-                            <input type="number" id="reading-mins" placeholder="Mins" required min="0" max="59" value="0">
-                        </div>
-                        
-                        <label>Hearing (Shravan):</label>
-                        <div class="input-group">
-                            <input type="number" id="hearing-hrs" placeholder="Hrs" required min="0" value="0">
-                            <input type="number" id="hearing-mins" placeholder="Mins" required min="0" max="59" value="0">
-                        </div>
-
-                        <div id="service-area" class="hidden">
-                            <label>Service (Seva):</label>
-                            <div class="input-group">
-                                <input type="number" id="service-hrs" placeholder="Hrs" min="0" value="0">
-                                <input type="number" id="service-mins" placeholder="Mins" min="0" max="59" value="0">
-                            </div>
-                        </div>
-
-                        <label>Day Sleep (Mins):</label><input type="number" id="day-sleep-minutes" value="0" required>
-                        <button type="submit" style="background: var(--success); margin-top: 15px;">Submit Sadhana</button>
-                    </form>
-                </div>
-            </div>
-
-            <div id="reports-tab" class="tab-content hidden">
-                <button onclick="downloadUserExcel(currentUser.uid, userProfile.name)" style="background:var(--success); margin-bottom:15px">Download My History (Excel)</button>       
-                              <div id="weekly-reports-container"></div>
-            </div>
-
-            <div id="admin-tab" class="tab-content hidden">
-                <div style="display:flex; gap:10px; margin-bottom:15px">
-                    <button onclick="downloadMasterReport()" style="background:var(--success)">Download Master Comparative Excel</button>
-                </div>
-                <div class="card" style="overflow-x:auto">
-                    <h3>4-Week Performance (%)</h3>
-                    <div id="admin-comparative-reports-container"></div>
-                </div>
-                <div class="card">
-                    <h3>User Management</h3>
-                    <div id="admin-users-list"></div>
-                </div>
+            <div id="admin-tab" class="tab-content">
+                <div id="admin-reports-container"></div>
             </div>
         </section>
     </div>
-
-    <div id="user-report-modal" class="modal hidden">
-        <div class="modal-content">
-            <span onclick="closeUserModal()" style="position:absolute; right:20px; top:20px; cursor:pointer; font-size:24px; font-weight:bold;">&times;</span>
-            <h2 id="modal-user-name" style="margin-top:0"></h2>
-            <div id="modal-report-container"></div>
-        </div>
-    </div>
-
     <script src="app.js"></script>
 </body>
 </html>
