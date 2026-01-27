@@ -1,4 +1,3 @@
-// --- 1. CONFIG (Version 8 Format) ---
 const firebaseConfig = {
   apiKey: "AIzaSyDbRy8ZMJAWeTyZVnTphwRIei6jAckagjA",
   authDomain: "sadhana-tracker-b65ff.firebaseapp.com",
@@ -8,110 +7,113 @@ const firebaseConfig = {
   appId: "1:926961218888:web:db8f12ef8256d13f036f7d"
 };
 
-// Initialize Firebase (v8 style)
-if (!firebase.apps.length) {
-    firebase.initializeApp(firebaseConfig);
-}
-const auth = firebase.auth();
-const db = firebase.firestore();
-
-// Is App ki pehchan (Unique ID)
+if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth(), db = firebase.firestore();
 const APP_ID = "App1_SeniorYouth_2026";
+let currentUser = null, userProfile = null;
 
-let currentUser = null;
-let userProfile = null;
+// --- Scoring Engine ---
+const t2m = (t, isS = false) => { if(!t) return 9999; let [h,m] = t.split(':').map(Number); if(isS && h<=3) h+=24; return h*60+m; };
 
-// --- 2. SCORING ENGINE (Locked Logic) ---
-const t2m = (t, isSleep = false) => {
-    if (!t) return 9999;
-    let [h, m] = t.split(':').map(Number);
-    if (isSleep && h >= 0 && h <= 3) h += 24; 
-    return h * 60 + m;
-};
+function calculateScore(d, pos) {
+    let sc = { sleep:-5, wakeup:-5, chanting:-5, reading:-5, hearing:-5, service:-5, notes:0, daySleep:0 };
+    
+    // Sleep (25), Wakeup (25), Chanting (25) Logic
+    const s = t2m(d.sleepTime, true);
+    if(s<=1350) sc.sleep=25; else if(s<=1375) sc.sleep=Math.max(0, 25-(s-1350)); else sc.sleep=0;
+    
+    const w = t2m(d.wakeupTime);
+    if(w<=305) sc.wakeup=25; else if(w<=330) sc.wakeup=Math.max(0, 25-(w-305)); else sc.wakeup=0;
 
-function calculateScore(data, position) {
-    let sc = { sleep: -5, wakeup: -5, chanting: -5, reading: -5, hearing: -5, service: -5, notes: 0, daySleep: 0 };
+    const c = t2m(d.chantingTime);
+    if(c<=540) sc.chanting=25; else if(c<=1140) sc.chanting=Math.max(0, 25-Math.floor((c-540)/30)*5);
 
-    // Standard Sleep/Wake/Chant (Max 25 each)
-    const slp = t2m(data.sleepTime, true);
-    if (slp <= 1350) sc.sleep = 25; else if (slp <= 1355) sc.sleep = 20; else if (slp <= 1360) sc.sleep = 15; else if (slp <= 1365) sc.sleep = 10; else if (slp <= 1370) sc.sleep = 5; else if (slp <= 1375) sc.sleep = 0;
+    sc.daySleep = d.daySleepMins <= 60 ? 10 : -5;
 
-    const wak = t2m(data.wakeupTime);
-    if (wak <= 305) sc.wakeup = 25; else if (wak <= 310) sc.wakeup = 20; else if (wak <= 315) sc.wakeup = 15; else if (wak <= 320) sc.wakeup = 10; else if (wak <= 325) sc.wakeup = 5; else if (wak <= 330) sc.wakeup = 0;
-
-    const chn = t2m(data.chantingTime);
-    if (chn <= 540) sc.chanting = 25; else if (chn <= 570) sc.chanting = 20; else if (chn <= 660) sc.chanting = 15; else if (chn <= 870) sc.chanting = 10; else if (chn <= 1020) sc.chanting = 5; else if (chn <= 1140) sc.chanting = 0;
-
-    sc.daySleep = (data.daySleepMins <= 60) ? 10 : -5;
-
-    // Position Wise Logic
-    if (position === "Senior Batch") {
-        // Senior Batch: Reading/Hearing Max 25, Service 10, Notes 15
-        const get25 = (m) => (m >= 30 ? 25 : (m >= 20 ? 15 : (m >= 15 ? 10 : (m >= 10 ? 5 : (m >= 5 ? 0 : -5)))));
-        sc.reading = get25(data.readM);
-        sc.hearing = get25(data.hearM);
-        sc.service = data.servM >= 15 ? 10 : (data.servM >= 10 ? 5 : (data.servM >= 5 ? 0 : -5));
-        sc.notes = data.noteM >= 20 ? 15 : (data.noteM >= 15 ? 10 : (data.noteM >= 10 ? 5 : (data.noteM >= 5 ? 0 : -5)));
+    if(pos === "Senior Batch") {
+        const get25 = (m) => m>=30?25:m>=20?15:m>=15?10:m>=10?5:m>=5?0:-5;
+        sc.reading=get25(d.readM); sc.hearing=get25(d.hearM);
+        sc.service=d.servM>=15?10:d.servM>=10?5:d.servM>=5?0:-5;
+        sc.notes=d.noteM>=20?15:d.noteM>=15?10:d.noteM>=10?5:d.noteM>=5?0:-5;
     } else {
-        // Coordinators: Reading/Hearing Max 30, Service 15, Notes 0
-        const get30 = (m) => (m >= 40 ? 30 : (m >= 30 ? 25 : (m >= 20 ? 15 : (m >= 10 ? 5 : -5))));
-        sc.reading = get30(data.readM);
-        sc.hearing = get30(data.hearM);
-        sc.service = data.servM >= 15 ? 15 : (data.servM >= 5 ? 5 : -5);
-        sc.notes = 0;
+        const get30 = (m) => m>=40?30:m>=30?25:m>=20?15:m>=10?5:-5;
+        sc.reading=get30(d.readM); sc.hearing=get30(d.hearM);
+        sc.service=d.servM>=15?15:d.servM>=5?5:-5;
     }
-
-    const total = Object.values(sc).reduce((a, b) => a + b, 0);
-    return { total, details: sc };
+    return { total: Object.values(sc).reduce((a,b)=>a+b,0), breakdown: sc };
 }
 
-// --- 3. UI & AUTH CONTROL ---
+// --- Auth & Profile ---
 auth.onAuthStateChanged(async (user) => {
     if (user) {
         currentUser = user;
         const doc = await db.collection('users').doc(user.uid).get();
         if (doc.exists) {
             userProfile = doc.data();
-            document.getElementById('user-display-name').innerText = userProfile.name + " (" + userProfile.position + ")";
-            if (userProfile.role === 'admin') document.getElementById('admin-tab-btn').style.display = 'inline-block';
-            if (userProfile.position === 'Senior Batch') document.getElementById('notes-group').classList.remove('hidden');
-            setupDashboard();
-        } else {
-            showSection('profile');
-        }
-    } else {
-        showSection('auth');
-    }
+            document.getElementById('user-display-name').innerText = userProfile.name;
+            if(userProfile.role === 'admin') document.getElementById('admin-tab-btn').classList.remove('hidden');
+            if(userProfile.position === 'Senior Batch') document.getElementById('notes-group').classList.remove('hidden');
+            showSection('dashboard'); setupDate();
+        } else showSection('profile');
+    } else showSection('auth');
 });
 
-// Authentication Buttons
 document.getElementById('login-btn').onclick = () => {
-    const email = document.getElementById('login-email').value;
-    const pass = document.getElementById('login-password').value;
-    auth.signInWithEmailAndPassword(email, pass).catch(e => alert(e.message));
+    auth.signInWithEmailAndPassword(document.getElementById('login-email').value, document.getElementById('login-password').value).catch(e => alert(e.message));
 };
 
-document.getElementById('logout-btn').onclick = () => auth.signOut().then(() => location.reload());
-
-// Profile Setup
 document.getElementById('save-profile-btn').onclick = async () => {
-    const name = document.getElementById('profile-name').value;
-    const pos = document.getElementById('profile-position').value;
-    if (!name || !pos) return alert("Please fill all details");
-    
-    await db.collection('users').doc(currentUser.uid).set({
-        name: name,
-        position: pos,
-        role: 'user',
-        app_id: APP_ID
-    });
+    const data = {
+        name: document.getElementById('profile-name').value,
+        position: document.getElementById('profile-position').value,
+        rounds: document.getElementById('profile-rounds').value,
+        app_id: APP_ID, role: userProfile?.role || 'user'
+    };
+    await db.collection('users').doc(currentUser.uid).set(data, {merge: true});
     location.reload();
 };
 
-// Sadhana Submission
+function openEditProfile() {
+    showSection('profile');
+    document.getElementById('profile-name').value = userProfile.name;
+    document.getElementById('profile-position').value = userProfile.position;
+    document.getElementById('profile-rounds').value = userProfile.rounds || 0;
+    document.getElementById('cancel-profile').classList.remove('hidden');
+}
+
+// --- Dashboard & Tabs ---
+function switchTab(tabId) {
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById(tabId + '-tab').classList.remove('hidden');
+    event.currentTarget.classList.add('active');
+    if(tabId === 'reports') loadUserReports();
+    if(tabId === 'admin') loadAdminData();
+}
+
+async function loadUserReports() {
+    const snap = await db.collection('sadhana_logs').where('uid','==',currentUser.uid).orderBy('date','desc').limit(10).get();
+    let html = '<h3>Recent History</h3>';
+    snap.forEach(doc => {
+        const d = doc.data();
+        html += `<div class="report-item"><span>${d.date}</span><strong>Score: ${d.totalScore}</strong></div>`;
+    });
+    document.getElementById('user-history').innerHTML = html;
+}
+
+async function loadAdminData() {
+    const snap = await db.collection('sadhana_logs').where('app_id','==',APP_ID).orderBy('date','desc').limit(20).get();
+    let html = '<table border="1" style="width:100%; border-collapse:collapse;"><tr><th>User</th><th>Pos</th><th>Score</th><th>Date</th></tr>';
+    snap.forEach(doc => {
+        const d = doc.data();
+        html += `<tr><td>${d.userName}</td><td>${d.position}</td><td>${d.totalScore}</td><td>${d.date}</td></tr>`;
+    });
+    document.getElementById('admin-data').innerHTML = html + '</table>';
+}
+
 document.getElementById('sadhana-form').onsubmit = async (e) => {
     e.preventDefault();
-    const payload = {
+    const d = {
         sleepTime: document.getElementById('sleep-time').value,
         wakeupTime: document.getElementById('wakeup-time').value,
         chantingTime: document.getElementById('chanting-time').value,
@@ -121,47 +123,27 @@ document.getElementById('sadhana-form').onsubmit = async (e) => {
         noteM: parseInt(document.getElementById('notes-mins')?.value) || 0,
         daySleepMins: parseInt(document.getElementById('day-sleep-mins').value) || 0
     };
+    const res = calculateScore(d, userProfile.position);
     const date = document.getElementById('sadhana-date').value;
-    const result = calculateScore(payload, userProfile.position);
-
     await db.collection('sadhana_logs').doc(currentUser.uid + "_" + date).set({
-        ...payload,
-        totalScore: result.total,
-        breakdown: result.details,
-        uid: currentUser.uid,
-        userName: userProfile.name,
-        position: userProfile.position,
-        date: date,
-        app_id: APP_ID,
-        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        ...d, totalScore: res.total, uid: currentUser.uid, userName: userProfile.name, position: userProfile.position, date, app_id: APP_ID
     });
-
-    alert("Hare Krishna! Sadhana submitted. Total Score: " + result.total);
+    alert("Saved! Score: " + res.total);
 };
 
-// UI Helper Functions
+function setupDate() {
+    const s = document.getElementById('sadhana-date');
+    s.innerHTML = "";
+    for(let i=0; i<3; i++) {
+        let d = new Date(); d.setDate(d.getDate()-i);
+        let iso = d.toISOString().split('T')[0];
+        s.innerHTML += `<option value="${iso}">${iso}</option>`;
+    }
+}
+
 function showSection(id) {
     document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
     document.getElementById(id + '-section').classList.remove('hidden');
 }
 
-function setupDashboard() {
-    showSection('dashboard');
-    const dateSelect = document.getElementById('sadhana-date');
-    dateSelect.innerHTML = "";
-    for (let i = 0; i < 2; i++) {
-        let d = new Date();
-        d.setDate(d.getDate() - i);
-        let iso = d.toISOString().split('T')[0];
-        dateSelect.innerHTML += `<option value="${iso}">${iso}</option>`;
-    }
-}
-
-// Tab Switching logic
-document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.onclick = () => {
-        document.querySelectorAll('.tab-btn, .tab-content').forEach(el => el.classList.remove('active'));
-        btn.classList.add('active');
-        document.getElementById(btn.getAttribute('data-tab') + '-tab').classList.add('active');
-    };
-});
+document.getElementById('logout-btn').onclick = () => auth.signOut().then(() => location.reload());
