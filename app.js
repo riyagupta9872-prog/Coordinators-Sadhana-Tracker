@@ -1,135 +1,128 @@
-const firebaseConfig = {
-  apiKey: "AIzaSyDbRy8ZMJAWeTyZVnTphwRIei6jAckagjA",
-  authDomain: "sadhana-tracker-b65ff.firebaseapp.com",
-  projectId: "sadhana-tracker-b65ff",
-  storageBucket: "sadhana-tracker-b65ff.firebasestorage.app",
-  messagingSenderId: "926961218888",
-  appId: "1:926961218888:web:db8f12ef8256d13f036f7d"
+// --- CONFIG & STATE ---
+let currentUserMeta = JSON.parse(localStorage.getItem('user_meta')) || null;
+
+const timeToMins = (timeStr, isNightShift = false) => {
+    if (!timeStr) return 0;
+    const [hrs, mins] = timeStr.split(':').map(Number);
+    let totalMins = hrs * 60 + mins;
+    if (isNightShift && hrs < 12) totalMins += 1440;
+    return totalMins;
 };
 
-if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth(), db = firebase.firestore();
-const APP_ID = "App1_SeniorYouth_2026";
-let userData = null;
+// --- UNIFIED SCORING ENGINE (The 160 Standard) ---
+const calculateUnifiedScore = (entry, pos) => {
+    let sc = { sleep: 0, wakeup: 0, chanting: 0, read: 0, hear: 0, service: 0, notes: 0, daySleep: 0 };
+    
+    // 1. SLEEP (Target 10:30 PM) - 5 min slabs
+    const sMins = timeToMins(entry.sleep, true);
+    if (sMins <= 1350) sc.sleep = 25;
+    else if (sMins > 1380) sc.sleep = -5; 
+    else sc.sleep = 25 - (Math.ceil((sMins - 1350) / 5) * 5);
 
-// SCORING
-const t2m = (t, isS = false) => { if(!t) return 9999; let [h,m] = t.split(':').map(Number); if(isS && h<=3) h+=24; return h*60+m; };
-function getScore(d, pos) {
-    let sc = { sleep:-5, wakeup:-5, chanting:-5, reading:-5, hearing:-5, service:-5, notes:0, daySleep:0 };
-    const s = t2m(d.sleepTime, true);
-    if(s<=1350) sc.sleep=25; else if(s<=1375) sc.sleep=Math.max(0, 25-(s-1350)); else sc.sleep=-5;
-    const w = t2m(d.wakeupTime);
-    if(w<=305) sc.wakeup=25; else if(w<=330) sc.wakeup=Math.max(0, 25-(w-305)); else sc.wakeup=-5;
-    const c = t2m(d.chantingTime);
-    if(c<=540) sc.chanting=25; else if(c<=1140) sc.chanting=Math.max(0, 25-Math.floor((c-540)/30)*5); else sc.chanting=-5;
-    sc.daySleep = d.daySleepMins <= 60 ? 10 : -5;
+    // 2. WAKEUP (Target 5:05 AM) - 5 min slabs
+    const wMins = timeToMins(entry.wakeup);
+    if (wMins <= 305) sc.wakeup = 25;
+    else if (wMins > 335) sc.wakeup = -5; 
+    else sc.wakeup = 25 - (Math.ceil((wMins - 305) / 5) * 5);
 
-    if(pos === "Senior Batch") {
-        const g25 = (m) => m>=30?25:m>=20?15:m>=15?10:m>=10?5:m>=5?0:-5;
-        sc.reading=g25(d.readM); sc.hearing=g25(d.hearM);
-        sc.service=d.servM>=15?10:d.servM>=10?5:d.servM>=5?0:-5;
-        sc.notes=d.noteM>=20?15:d.noteM>=15?10:d.noteM>=10?5:d.noteM>=5?0:-5;
+    // 3. CHANTING (The 2026 Gradual Buckets)
+    const cMins = timeToMins(entry.chanting);
+    if (cMins <= 540) sc.chanting = 25;      // 9:00 AM
+    else if (cMins <= 570) sc.chanting = 20; // 9:30 AM
+    else if (cMins <= 660) sc.chanting = 15; // 11:00 AM
+    else if (cMins <= 870) sc.chanting = 10; // 2:30 PM
+    else if (cMins <= 1020) sc.chanting = 5; // 5:00 PM
+    else if (cMins <= 1140) sc.chanting = 0; // 7:00 PM
+    else sc.chanting = -5;
+
+    // 4. STUDY (Both Compulsory - No "Best of" anymore)
+    const getStudyPts = (m) => (m >= 30 ? 25 : (m >= 15 ? 15 : (m >= 10 ? 5 : 0)));
+    sc.read = getStudyPts(entry.read);
+    sc.hear = getStudyPts(entry.hear);
+
+    // 5. POSITION SPECIFIC (Senior Batch vs Coordinators)
+    if (pos === "Senior Batch") {
+        sc.service = entry.service >= 15 ? 10 : 0;
+        sc.notes = entry.notes >= 20 ? 15 : 0;
     } else {
-        const g30 = (m) => m>=40?30:m>=30?25:m>=20?15:m>=10?5:-5;
-        sc.reading=g30(d.readM); sc.hearing=g30(d.hearM);
-        sc.service=d.servM>=15?15:d.servM>=5?5:-5;
+        // Coordinators: Reading/Hearing (50) + Service (25)
+        sc.service = entry.service >= 30 ? 25 : (entry.service >= 15 ? 15 : (entry.service >= 5 ? 5 : 0));
+        sc.notes = 0;
     }
-    return { total: Object.values(sc).reduce((a,b)=>a+b,0), details: sc };
-}
 
-// AUTH
-auth.onAuthStateChanged(async (user) => {
-    if (user) {
-        const doc = await db.collection('users').doc(user.uid).get();
-        if (doc.exists && doc.data().position) {
-            userData = doc.data();
-            document.getElementById('user-display-name').innerText = userData.name;
-            document.getElementById('user-meta').innerText = `${userData.position} | ${userData.level}`;
-            if(userData.role === 'admin') document.getElementById('tab-btn-admin').classList.remove('hidden');
-            if(userData.position === 'Senior Batch') document.getElementById('notes-group').classList.remove('hidden');
-            initDash();
-        } else showSec('profile');
-    } else showSec('auth');
-});
+    // 6. DAY SLEEP
+    sc.daySleep = entry.daySleep === 0 ? 10 : (entry.daySleep <= 60 ? 5 : -5);
 
-// UI NAVIGATION
-const showSec = (id) => { document.querySelectorAll('section').forEach(s=>s.classList.add('hidden')); document.getElementById(id+'-section').classList.remove('hidden'); };
-const switchTab = (id) => { 
-    document.querySelectorAll('.tab-content').forEach(c=>c.classList.add('hidden')); 
-    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
-    document.getElementById(id+'-tab').classList.remove('hidden');
-    document.getElementById('tab-btn-'+id).classList.add('active');
-    if(id === 'reports') loadHistory();
-    if(id === 'admin') loadAdmin();
+    return { total: Object.values(sc).reduce((a, b) => a + b, 0), breakdown: sc };
 };
 
-document.getElementById('tab-btn-entry').onclick = () => switchTab('entry');
-document.getElementById('tab-btn-reports').onclick = () => switchTab('reports');
-document.getElementById('tab-btn-admin').onclick = () => switchTab('admin');
-document.getElementById('edit-profile-btn').onclick = () => {
-    showSec('profile');
-    document.getElementById('profile-name').value = userData.name;
-    document.getElementById('profile-position').value = userData.position;
-    document.getElementById('profile-level').value = userData.level;
-    document.getElementById('profile-rounds').value = userData.rounds;
-};
+// --- FIREBASE SUBMISSION ---
+const submitDailyReport = async (event) => {
+    event.preventDefault();
+    if (!currentUserMeta) return alert("Profile save karo pehle!");
 
-// HANDLERS
-document.getElementById('login-btn').onclick = () => auth.signInWithEmailAndPassword(document.getElementById('login-email').value, document.getElementById('login-password').value).catch(e => alert(e.message));
-document.getElementById('logout-btn').onclick = () => auth.signOut().then(()=>location.reload());
-
-document.getElementById('save-profile-btn').onclick = async () => {
-    const np = document.getElementById('new-password').value;
-    if(np && np.length >= 6) await auth.currentUser.updatePassword(np);
-    await db.collection('users').doc(auth.currentUser.uid).set({
-        name: document.getElementById('profile-name').value,
-        position: document.getElementById('profile-position').value,
-        level: document.getElementById('profile-level').value,
-        rounds: document.getElementById('profile-rounds').value,
-        app_id: APP_ID
-    }, {merge:true});
-    location.reload();
-};
-
-document.getElementById('sadhana-form').onsubmit = async (e) => {
-    e.preventDefault();
-    const d = {
-        sleepTime: document.getElementById('sleep-time').value,
-        wakeupTime: document.getElementById('wakeup-time').value,
-        chantingTime: document.getElementById('chanting-time').value,
-        readM: parseInt(document.getElementById('read-mins').value)||0,
-        hearM: parseInt(document.getElementById('hear-mins').value)||0,
-        servM: parseInt(document.getElementById('serv-mins').value)||0,
-        noteM: parseInt(document.getElementById('notes-mins')?.value)||0,
-        daySleepMins: parseInt(document.getElementById('day-sleep').value)||0
+    const data = {
+        date: document.getElementById('s-date').value,
+        sleep: document.getElementById('s-sleep').value,
+        wakeup: document.getElementById('s-wakeup').value,
+        chanting: document.getElementById('s-chanting').value,
+        read: parseInt(document.getElementById('s-read').value) || 0,
+        hear: parseInt(document.getElementById('s-hear').value) || 0,
+        service: parseInt(document.getElementById('s-service').value) || 0,
+        notes: parseInt(document.getElementById('s-notes').value) || 0,
+        daySleep: parseInt(document.getElementById('s-daysleep').value) || 0
     };
-    const res = getScore(d, userData.position);
-    const date = document.getElementById('sadhana-date').value;
-    await db.collection('sadhana_logs').doc(auth.currentUser.uid+"_"+date).set({
-        ...d, totalScore: res.total, uid: auth.currentUser.uid, userName: userData.name, position: userData.position, date, app_id: APP_ID
-    });
-    alert("Saved! Score: " + res.total);
+
+    const result = calculateUnifiedScore(data, currentUserMeta.pos);
+
+    try {
+        await db.collection('sadhana_logs').add({
+            uName: currentUserMeta.name,
+            uLevel: currentUserMeta.level, // Sirf reporting ke liye
+            uPos: currentUserMeta.pos,
+            ...data,
+            totalScore: result.total,
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        alert(`Jai Ho! Total Score: ${result.total}/160`);
+    } catch (e) { alert("Error! Check Console."); }
 };
 
-const initDash = () => {
-    showSec('dashboard');
-    const s = document.getElementById('sadhana-date'); s.innerHTML = "";
-    for(let i=0; i<3; i++) {
-        let d = new Date(); d.setDate(d.getDate()-i);
-        let iso = d.toISOString().split('T')[0];
-        s.innerHTML += `<option value="${iso}">${iso}</option>`;
+// --- ADMIN REPORTS (Efficiency Calculation) ---
+const loadAdminReports = async () => {
+    const reportDiv = document.getElementById('report-output');
+    try {
+        const snap = await db.collection('sadhana_logs').get();
+        let userStats = {};
+
+        snap.forEach(doc => {
+            const log = doc.data();
+            if (!userStats[log.uName]) userStats[log.uName] = { score: 0, level: log.uLevel };
+            userStats[log.uName].score += log.totalScore;
+        });
+
+        let table = `<table class="report-table"><tr><th>Devotee</th><th>Level</th><th>Efficiency %</th></tr>`;
+        for (let name in userStats) {
+            // Everyone is measured against the 160-mark standard
+            const weeklyMax = 1120; 
+            const efficiency = ((userStats[name].score / weeklyMax) * 100).toFixed(1);
+            table += `<tr><td>${name}</td><td>${userStats[name].level}</td><td><b>${efficiency}%</b></td></tr>`;
+        }
+        reportDiv.innerHTML = table + `</table>`;
+    } catch (e) { reportDiv.innerHTML = "Error loading stats."; }
+};
+
+// Initialization remains the same
+window.onload = () => {
+    if (currentUserMeta) {
+        document.getElementById('p-name').value = currentUserMeta.name || '';
+        document.getElementById('p-pos').value = currentUserMeta.pos || 'Senior Batch';
+        document.getElementById('p-level').value = currentUserMeta.level || 'Level 1';
+        handlePositionUI(); 
+        if (currentUserMeta.isAdmin) {
+            document.getElementById('admin-panel').style.display = 'block';
+            loadAdminReports();
+        }
     }
+    document.getElementById('sadhana-form').addEventListener('submit', submitDailyReport);
 };
-
-async function loadHistory() {
-    const snap = await db.collection('sadhana_logs').where('uid','==',auth.currentUser.uid).orderBy('date','desc').limit(10).get();
-    let h = ''; snap.forEach(doc => { h += `<div class="report-item"><span>${doc.data().date}</span><strong>${doc.data().totalScore}</strong></div>`; });
-    document.getElementById('reports-list').innerHTML = h || "No data yet.";
-}
-
-async function loadAdmin() {
-    const snap = await db.collection('sadhana_logs').where('app_id','==',APP_ID).orderBy('date','desc').limit(30).get();
-    let h = '<table style="width:100%; border-collapse:collapse;"><tr><th>User</th><th>Score</th><th>Date</th></tr>';
-    snap.forEach(doc => { h += `<tr style="border-bottom:1px solid #eee;"><td>${doc.data().userName}</td><td>${doc.data().totalScore}</td><td>${doc.data().date}</td></tr>`; });
-    document.getElementById('admin-list').innerHTML = h + '</table>';
-}
