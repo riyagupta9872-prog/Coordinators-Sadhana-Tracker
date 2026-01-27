@@ -3,139 +3,146 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sadhana Tracker Pro | Level 4</title>
+    <title>Coordinators Sadhana Tracker</title>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
     
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
-        :root { --primary: #6366f1; --bg: #f3f4f6; --card: #ffffff; --text: #1e293b; --accent: #f43f5e; }
-        body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 15px; }
-        .dashboard { max-width: 1000px; margin: 0 auto; display: grid; grid-template-columns: 300px 1fr; gap: 20px; }
-        @media (max-width: 768px) { .dashboard { grid-template-columns: 1fr; } }
+        body { font-family: 'Inter', sans-serif; background: #f4f7f6; margin: 0; padding: 20px; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 12px; shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: #2c3e50; }
         
-        .card { background: var(--card); border-radius: 16px; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); border: 1px solid #e2e8f0; }
-        .sidebar { display: flex; flex-direction: column; gap: 20px; }
-        
-        h2 { font-size: 1.25rem; margin-top: 0; display: flex; align-items: center; gap: 8px; color: var(--primary); }
+        /* Tab Styles */
+        .tab { overflow: hidden; border-bottom: 2px solid #ccc; margin-bottom: 20px; }
+        .tab button { background-color: inherit; float: left; border: none; outline: none; cursor: pointer; padding: 14px 16px; transition: 0.3s; font-size: 17px; font-weight: 600; }
+        .tab button:hover { background-color: #ddd; }
+        .tab button.active { border-bottom: 3px solid #3498db; color: #3498db; }
+        .tab-content { display: none; padding: 6px 12px; }
+
+        /* Form Styles */
         .input-group { margin-bottom: 15px; }
-        label { display: block; font-size: 0.75rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 6px; }
-        input, select { width: 100%; padding: 12px; border: 2px solid #e2e8f0; border-radius: 10px; font-size: 0.95rem; transition: 0.2s; box-sizing: border-box; }
-        input:focus { border-color: var(--primary); outline: none; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input, select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
+        button.submit-btn { width: 100%; padding: 12px; background: #3498db; color: white; border: none; border-radius: 6px; font-size: 16px; cursor: pointer; }
         
-        button { background: var(--primary); color: white; border: none; padding: 14px; border-radius: 10px; font-weight: 700; cursor: pointer; transition: 0.3s; width: 100%; }
-        button:hover { opacity: 0.9; transform: translateY(-1px); }
-        
-        .grid-entry { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-        .admin-badge { background: #fee2e2; color: #ef4444; padding: 4px 8px; border-radius: 6px; font-size: 0.7rem; font-weight: 800; margin-left: auto; }
-        
-        /* Report Table */
-        .report-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.9rem; }
-        .report-table th { text-align: left; padding: 12px; border-bottom: 2px solid #f1f5f9; color: #64748b; }
-        .report-table td { padding: 12px; border-bottom: 1px solid #f1f5f9; }
-        .efficiency-bar { height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; margin-top: 4px; }
-        .efficiency-fill { height: 100%; background: var(--primary); }
+        /* Table Styles */
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #f2f2f2; }
     </style>
 </head>
 <body>
 
-<div class="dashboard">
-    <div class="sidebar">
-        <div class="card">
-            <h2>👤 Profile</h2>
-            <div class="input-group">
-                <label>Name</label>
-                <input type="text" id="p-name" placeholder="Devotee Name">
-            </div>
-            <div class="input-group">
-                <label>Position</label>
-                <select id="p-pos" onchange="toggleNotes()">
-                    <option value="Senior Batch">Senior Batch</option>
-                    <option value="IGF Coordinator">IGF Coordinator</option>
-                    <option value="Overall Coordinator">Overall Coordinator</option>
-                </select>
-            </div>
-            <div class="input-group">
-                <label>Sadhana Level</label>
-                <select id="p-level">
-                    <option value="Level 1">Level 1</option>
-                    <option value="Level 2">Level 2</option>
-                    <option value="Level 4">Level 4 (Strict)</option>
-                </select>
-            </div>
-            <div class="input-group">
-                <label>Admin Access</label>
-                <input type="password" id="admin-key" placeholder="Key">
-            </div>
-            <button onclick="saveProfile()">Lock & Sync</button>
-        </div>
-        
-        <div id="admin-panel" class="card" style="display:none">
-            <h2>📊 Weekly Reports</h2>
-            <div id="report-output"></div>
-        </div>
+<div class="container">
+    <h1>Coordinators Sadhana Tracker</h1>
+
+    <div class="tab">
+        <button class="tablinks active" onclick="openTab(event, 'Profile')">Profile</button>
+        <button class="tablinks" onclick="openTab(event, 'DailyEntry')">Daily Entry</button>
+        <button class="tablinks" onclick="openTab(event, 'Reports')">Reports</button>
     </div>
 
-    <div class="main-content">
-        <div class="card">
-            <h2>📝 Daily Sadhana Entry <span id="admin-tag"></span></h2>
-            <form id="sadhana-form">
-                <div class="grid-entry">
-                    <div class="input-group">
-                        <label>Date</label>
-                        <input type="date" id="s-date" required>
-                    </div>
-                    <div class="input-group">
-                        <label>Sleep (10:30 PM)</label>
-                        <input type="time" id="s-sleep" required>
-                    </div>
-                </div>
-                <div class="grid-entry">
-                    <div class="input-group">
-                        <label>Wakeup (5:05 AM)</label>
-                        <input type="time" id="s-wakeup" required>
-                    </div>
-                    <div class="input-group">
-                        <label>Chanting Finish</label>
-                        <input type="time" id="s-chanting" required>
-                    </div>
-                </div>
-                <div class="grid-entry">
-                    <div class="input-group">
-                        <label>Reading (Mins)</label>
-                        <input type="number" id="s-read" value="0">
-                    </div>
-                    <div class="input-group">
-                        <label>Hearing (Mins)</label>
-                        <input type="number" id="s-hear" value="0">
-                    </div>
-                </div>
-                <div class="grid-entry">
-                    <div class="input-group">
-                        <label>Service (Mins)</label>
-                        <input type="number" id="s-service" value="0">
-                    </div>
-                    <div class="input-group" id="notes-wrapper" style="display:none">
-                        <label>Notes Rev (Mins)</label>
-                        <input type="number" id="s-notes" value="0">
-                    </div>
-                </div>
-                <div class="input-group">
-                    <label>Day Sleep (Mins)</label>
-                    <input type="number" id="s-daysleep" value="0">
-                </div>
-                <button type="submit">Submit Report</button>
-            </form>
+    <div id="Profile" class="tab-content" style="display:block;">
+        <h3>User Profile</h3>
+        <div class="input-group">
+            <label>Full Name</label>
+            <input type="text" id="p-name" placeholder="Enter your name">
         </div>
+        <div class="input-group">
+            <label>Position</label>
+            <select id="p-pos" onchange="toggleNotesUI()">
+                <option value="Senior Batch">Senior Batch</option>
+                <option value="IGF Coordinator">IGF Coordinator</option>
+                <option value="Overall Coordinator">Overall Coordinator</option>
+            </select>
+        </div>
+        <div class="input-group">
+            <label>Level</label>
+            <select id="p-level">
+                <option value="Level 1">Level 1</option>
+                <option value="Level 2">Level 2</option>
+                <option value="Level 3">Level 3</option>
+                <option value="Level 4">Level 4</option>
+            </select>
+        </div>
+        <div class="input-group" id="admin-key-section">
+            <label>Admin Key (Optional)</label>
+            <input type="password" id="admin-key" placeholder="Enter key for Admin access">
+        </div>
+        <button class="submit-btn" onclick="saveProfile()">Save Profile</button>
+    </div>
+
+    <div id="DailyEntry" class="tab-content">
+        <h3>Daily Sadhana Log</h3>
+        <form id="sadhana-form">
+            <div class="input-group">
+                <label>Date</label>
+                <input type="date" id="s-date" required>
+            </div>
+            <div class="input-group">
+                <label>Sleep Time (Nidra)</label>
+                <input type="time" id="s-sleep" required>
+            </div>
+            <div class="input-group">
+                <label>Wakeup Time</label>
+                <input type="time" id="s-wakeup" required>
+            </div>
+            <div class="input-group">
+                <label>Chanting Finish Time</label>
+                <input type="time" id="s-chanting" required>
+            </div>
+            <div class="input-group">
+                <label>Reading (Minutes)</label>
+                <input type="number" id="s-read" value="0">
+            </div>
+            <div class="input-group">
+                <label>Hearing (Minutes)</label>
+                <input type="number" id="s-hear" value="0">
+            </div>
+            <div class="input-group">
+                <label>Service (Minutes)</label>
+                <input type="number" id="s-service" value="0">
+            </div>
+            <div class="input-group" id="notes-wrapper" style="display:none;">
+                <label>Notes Revision (Minutes)</label>
+                <input type="number" id="s-notes" value="0">
+            </div>
+            <div class="input-group">
+                <label>Day Sleep (Minutes)</label>
+                <input type="number" id="s-daysleep" value="0">
+            </div>
+            <button type="submit" class="submit-btn">Submit Daily Log</button>
+        </form>
+    </div>
+
+    <div id="Reports" class="tab-content">
+        <h3>Sadhana Efficiency Report</h3>
+        <div id="report-output">
+            </div>
     </div>
 </div>
 
-<script src="app.js"></script>
 <script>
-    // Paste your Firebase Config here
-    const firebaseConfig = { /* CONFIG */ };
-    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    // Paste your Firebase Config here (KEEP YOUR ORIGINAL CONFIG)
+    const firebaseConfig = { 
+        apiKey: "YOUR_API_KEY",
+        authDomain: "YOUR_AUTH_DOMAIN",
+        projectId: "YOUR_PROJECT_ID",
+        storageBucket: "YOUR_STORAGE_BUCKET",
+        messagingSenderId: "YOUR_SENDER_ID",
+        appId: "YOUR_APP_ID"
+    };
+    firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
+
+    // Small helper for the Notes field visibility inside index.html
+    function toggleNotesUI() {
+        const pos = document.getElementById('p-pos').value;
+        document.getElementById('notes-wrapper').style.display = (pos === "Senior Batch") ? "block" : "none";
+    }
 </script>
+<script src="app.js"></script>
+
 </body>
 </html>
