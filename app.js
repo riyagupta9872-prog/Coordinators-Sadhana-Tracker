@@ -1,12 +1,27 @@
-// --- CONFIG ---
+// --- 1. CONFIG (Version 8 Format) ---
+const firebaseConfig = {
+  apiKey: "AIzaSyDbRy8ZMJAWeTyZVnTphwRIei6jAckagjA",
+  authDomain: "sadhana-tracker-b65ff.firebaseapp.com",
+  projectId: "sadhana-tracker-b65ff",
+  storageBucket: "sadhana-tracker-b65ff.firebasestorage.app",
+  messagingSenderId: "926961218888",
+  appId: "1:926961218888:web:db8f12ef8256d13f036f7d"
+};
+
+// Initialize Firebase (v8 style)
+if (!firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
+}
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+// Is App ki pehchan (Unique ID)
 const APP_ID = "App1_SeniorYouth_2026";
-const firebaseConfig = { /* PASTE NEW PROJECT CONFIG HERE */ };
-firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth(), db = firebase.firestore();
 
-let currentUser = null, userProfile = null;
+let currentUser = null;
+let userProfile = null;
 
-// --- SCORE ENGINE ---
+// --- 2. SCORING ENGINE (Locked Logic) ---
 const t2m = (t, isSleep = false) => {
     if (!t) return 9999;
     let [h, m] = t.split(':').map(Number);
@@ -17,7 +32,7 @@ const t2m = (t, isSleep = false) => {
 function calculateScore(data, position) {
     let sc = { sleep: -5, wakeup: -5, chanting: -5, reading: -5, hearing: -5, service: -5, notes: 0, daySleep: 0 };
 
-    // Common Base
+    // Standard Sleep/Wake/Chant (Max 25 each)
     const slp = t2m(data.sleepTime, true);
     if (slp <= 1350) sc.sleep = 25; else if (slp <= 1355) sc.sleep = 20; else if (slp <= 1360) sc.sleep = 15; else if (slp <= 1365) sc.sleep = 10; else if (slp <= 1370) sc.sleep = 5; else if (slp <= 1375) sc.sleep = 0;
 
@@ -29,57 +44,71 @@ function calculateScore(data, position) {
 
     sc.daySleep = (data.daySleepMins <= 60) ? 10 : -5;
 
-    // Position Specific logic
+    // Position Wise Logic
     if (position === "Senior Batch") {
+        // Senior Batch: Reading/Hearing Max 25, Service 10, Notes 15
         const get25 = (m) => (m >= 30 ? 25 : (m >= 20 ? 15 : (m >= 15 ? 10 : (m >= 10 ? 5 : (m >= 5 ? 0 : -5)))));
         sc.reading = get25(data.readM);
         sc.hearing = get25(data.hearM);
         sc.service = data.servM >= 15 ? 10 : (data.servM >= 10 ? 5 : (data.servM >= 5 ? 0 : -5));
         sc.notes = data.noteM >= 20 ? 15 : (data.noteM >= 15 ? 10 : (data.noteM >= 10 ? 5 : (data.noteM >= 5 ? 0 : -5)));
     } else {
+        // Coordinators: Reading/Hearing Max 30, Service 15, Notes 0
         const get30 = (m) => (m >= 40 ? 30 : (m >= 30 ? 25 : (m >= 20 ? 15 : (m >= 10 ? 5 : -5))));
         sc.reading = get30(data.readM);
         sc.hearing = get30(data.hearM);
         sc.service = data.servM >= 15 ? 15 : (data.servM >= 5 ? 5 : -5);
-        sc.notes = 0; // Not applicable for coords
+        sc.notes = 0;
     }
 
     const total = Object.values(sc).reduce((a, b) => a + b, 0);
     return { total, details: sc };
 }
 
-// --- AUTH & UI ---
+// --- 3. UI & AUTH CONTROL ---
 auth.onAuthStateChanged(async (user) => {
     if (user) {
         currentUser = user;
         const doc = await db.collection('users').doc(user.uid).get();
         if (doc.exists) {
             userProfile = doc.data();
-            document.getElementById('user-display-name').textContent = `${userProfile.name} | ${userProfile.position}`;
-            if (userProfile.role === 'admin') document.getElementById('admin-tab-btn').style.display = 'block';
+            document.getElementById('user-display-name').innerText = userProfile.name + " (" + userProfile.position + ")";
+            if (userProfile.role === 'admin') document.getElementById('admin-tab-btn').style.display = 'inline-block';
             if (userProfile.position === 'Senior Batch') document.getElementById('notes-group').classList.remove('hidden');
-            setupApp();
-        } else showSection('profile');
-    } else showSection('auth');
+            setupDashboard();
+        } else {
+            showSection('profile');
+        }
+    } else {
+        showSection('auth');
+    }
 });
 
-// Event Listeners for Login, Profile, etc.
+// Authentication Buttons
 document.getElementById('login-btn').onclick = () => {
     const email = document.getElementById('login-email').value;
     const pass = document.getElementById('login-password').value;
-    auth.signInWithEmailAndPassword(email, pass).catch(err => alert(err.message));
+    auth.signInWithEmailAndPassword(email, pass).catch(e => alert(e.message));
 };
 
+document.getElementById('logout-btn').onclick = () => auth.signOut().then(() => location.reload());
+
+// Profile Setup
 document.getElementById('save-profile-btn').onclick = async () => {
     const name = document.getElementById('profile-name').value;
     const pos = document.getElementById('profile-position').value;
-    if (!name || !pos) return alert("Fill all details");
+    if (!name || !pos) return alert("Please fill all details");
+    
     await db.collection('users').doc(currentUser.uid).set({
-        name, position: pos, role: 'user', app_id: APP_ID
+        name: name,
+        position: pos,
+        role: 'user',
+        app_id: APP_ID
     });
     location.reload();
 };
 
+// Sadhana Submission
 document.getElementById('sadhana-form').onsubmit = async (e) => {
     e.preventDefault();
     const payload = {
@@ -95,25 +124,37 @@ document.getElementById('sadhana-form').onsubmit = async (e) => {
     const date = document.getElementById('sadhana-date').value;
     const result = calculateScore(payload, userProfile.position);
 
-    await db.collection('sadhana_logs').doc(`${currentUser.uid}_${date}`).set({
-        ...payload, ...result, uid: currentUser.uid, position: userProfile.position, date, app_id: APP_ID
+    await db.collection('sadhana_logs').doc(currentUser.uid + "_" + date).set({
+        ...payload,
+        totalScore: result.total,
+        breakdown: result.details,
+        uid: currentUser.uid,
+        userName: userProfile.name,
+        position: userProfile.position,
+        date: date,
+        app_id: APP_ID,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
     });
-    alert(`Entry Saved! Score: ${result.total}`);
+
+    alert("Hare Krishna! Sadhana submitted. Total Score: " + result.total);
 };
 
-function setupApp() {
-    showSection('dashboard');
-    const s = document.getElementById('sadhana-date');
-    for (let i = 0; i < 2; i++) {
-        let d = new Date(); d.setDate(d.getDate() - i);
-        let iso = d.toISOString().split('T')[0];
-        s.innerHTML += `<option value="${iso}">${iso}</option>`;
-    }
-}
-
+// UI Helper Functions
 function showSection(id) {
     document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
     document.getElementById(id + '-section').classList.remove('hidden');
+}
+
+function setupDashboard() {
+    showSection('dashboard');
+    const dateSelect = document.getElementById('sadhana-date');
+    dateSelect.innerHTML = "";
+    for (let i = 0; i < 2; i++) {
+        let d = new Date();
+        d.setDate(d.getDate() - i);
+        let iso = d.toISOString().split('T')[0];
+        dateSelect.innerHTML += `<option value="${iso}">${iso}</option>`;
+    }
 }
 
 // Tab Switching logic
@@ -121,6 +162,6 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.onclick = () => {
         document.querySelectorAll('.tab-btn, .tab-content').forEach(el => el.classList.remove('active'));
         btn.classList.add('active');
-        document.getElementById(btn.dataset.tab + '-tab').classList.add('active');
+        document.getElementById(btn.getAttribute('data-tab') + '-tab').classList.add('active');
     };
 });
