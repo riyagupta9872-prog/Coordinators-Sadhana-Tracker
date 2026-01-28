@@ -1,149 +1,119 @@
-// --- Global Data ---
 let userData = JSON.parse(localStorage.getItem('devotee_meta')) || {};
 
-// --- Tab System (Purana & Simple) ---
-function openTab(evt, tabName) {
-    let i, tabcontent, tablinks;
-    tabcontent = document.getElementsByClassName("tab-content");
-    for (i = 0; i < tabcontent.length; i++) {
-        tabcontent[i].style.display = "none";
-    }
-    tablinks = document.getElementsByClassName("tablinks");
-    for (i = 0; i < tablinks.length; i++) {
-        tablinks[i].className = tablinks[i].className.replace(" active", "");
-    }
-    document.getElementById(tabName).style.display = "block";
-    if (evt) evt.currentTarget.className += " active";
+// 1. DATE DROPDOWN (DD.MM.YYYY)
+function setupDateDropdown() {
+    const dateSelect = document.getElementById('s-date');
+    if (!dateSelect) return;
+    const today = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(today.getDate() - 1);
+    const formatDate = (d) => {
+        let dd = String(d.getDate()).padStart(2, '0');
+        let mm = String(d.getMonth() + 1).padStart(2, '0');
+        let yyyy = d.getFullYear();
+        return `${dd}.${mm}.${yyyy}`;
+    };
+    dateSelect.innerHTML = `<option value="${formatDate(today)}">${formatDate(today)}</option>
+                            <option value="${formatDate(yesterday)}">${formatDate(yesterday)}</option>`;
 }
 
-// --- Logic Update (Position & Chanting Buckets) ---
+// 2. SCORING ENGINE (5-MIN SLABS FIXED)
 function calculateSadhanaScore(d) {
-    let sc = { sleep: 0, wakeup: 0, chanting: 0, read: 0, hear: 0, service: 0, notes: 0, daySleep: 0 };
-    const t2m = (t, night = false) => {
-        if (!t) return 0;
-        let [h, m] = t.split(':').map(Number);
-        let total = h * 60 + m;
-        if (night && h < 12) total += 1440;
-        return total;
-    };
+    let s = 0;
+    const t2m = (t, n=false) => { if(!t) return 0; let [h,m]=t.split(':').map(Number); return n&&h<12 ? (h*60+m)+1440 : h*60+m; };
 
-    // 1. Sleep: 10:30 PM (1350m)
-    const sTime = t2m(d.sleep, true);
-    if (sTime <= 1350) sc.sleep = 25;
-    else if (sTime > 1380) sc.sleep = -5;
-    else sc.sleep = 25 - (Math.ceil((sTime - 1350) / 5) * 5);
+    // Sleep (10:30 PM) & Wakeup (5:05 AM)
+    const sT = t2m(d.sleep, true);
+    s += (sT <= 1350) ? 25 : (sT > 1380 ? -5 : 25 - (Math.ceil((sT-1350)/5)*5));
+    const wT = t2m(d.wakeup);
+    s += (wT <= 305) ? 25 : (wT > 335 ? -5 : 25 - (Math.ceil((wT-305)/5)*5));
 
-    // 2. Wakeup: 5:05 AM (305m)
-    const wTime = t2m(d.wakeup);
-    if (wTime <= 305) sc.wakeup = 25;
-    else if (wTime > 335) sc.wakeup = -5;
-    else sc.wakeup = 25 - (Math.ceil((wTime - 305) / 5) * 5);
+    // Chanting (Jan 27 Buckets)
+    const cT = t2m(d.chanting);
+    if(cT <= 540) s+=25; else if(cT <= 570) s+=20; else if(cT <= 660) s+=15;
+    else if(cT <= 870) s+=10; else if(cT <= 1020) s+=5; else if(cT <= 1140) s+=0; else s-=5;
 
-    // 3. Chanting: Buckets (Locked Jan-2026)
-    const cTime = t2m(d.chanting);
-    if (cTime <= 540) sc.chanting = 25;       // 9:00 AM
-    else if (cTime <= 570) sc.chanting = 20;  // 9:30 AM
-    else if (cTime <= 660) sc.chanting = 15;  // 11:00 AM
-    else if (cTime <= 870) sc.chanting = 10;  // 2:30 PM
-    else if (cTime <= 1020) sc.chanting = 5;   // 5:00 PM
-    else if (cTime <= 1140) sc.chanting = 0;   // 7:00 PM
-    else sc.chanting = -5;
+    // 5-Min Slab Calculator (Target 30m, Max 25pt, 0m = -5)
+    const getSlab30 = (m) => (m >= 30) ? 25 : 25 - (Math.ceil((30 - m) / 5) * 5);
+    
+    s += getSlab30(d.read); // Reading 20m = 15pt
+    s += getSlab30(d.hear); // Hearing 20m = 15pt
 
-    // 4. Study: Reading & Hearing (Both Compulsory for everyone)
-    const getStudyPts = (m) => (m >= 30 ? 25 : (m >= 15 ? 15 : (m >= 10 ? 5 : 0)));
-    sc.read = getStudyPts(d.read);
-    sc.hear = getStudyPts(d.hear);
-
-    // 5. Position Logic (Locked Senior Batch Addition)
+    // Position Specific
     if (userData.pos === "Senior Batch") {
-        sc.service = d.service >= 15 ? 10 : 0; // 15m = 10pt
-        sc.notes = d.notes >= 20 ? 15 : 0;     // 20m = 15pt
+        // Senior Sewa (Target 15m, Max 10pt, 0m = -5)
+        s += (d.service >= 15) ? 10 : 10 - (Math.ceil((15 - d.service) / 5) * 5);
+        // Senior Notes (Target 20m, Max 15pt, 0m = -5)
+        s += (d.notes >= 20) ? 15 : 15 - (Math.ceil((20 - d.notes) / 5) * 5);
     } else {
-        sc.service = d.service >= 30 ? 25 : (d.service >= 15 ? 15 : (d.service >= 5 ? 5 : 0));
-        sc.notes = 0;
+        // Coordinator Sewa (Target 30m, Max 25pt, 0m = -5)
+        s += getSlab30(d.service);
     }
 
-    sc.daySleep = d.daySleep === 0 ? 10 : (d.daySleep <= 60 ? 5 : -5);
-    return Object.values(sc).reduce((a, b) => a + b, 0);
+    // Day Sleep
+    s += (d.daySleep === 0) ? 10 : (d.daySleep <= 60 ? 5 : -5);
+    return s;
 }
 
-// --- Submit & Profile ---
+// 3. UI HANDLERS
+function showProfileEditor() {
+    document.getElementById('ProfileEditor').style.display = 'block';
+    document.getElementById('MainUI').style.display = 'none';
+    document.getElementById('user-display').style.display = 'none';
+}
+
+function showTab(name) {
+    document.querySelectorAll('.section').forEach(s => s.style.display = 'none');
+    document.getElementById(name + 'Tab').style.display = 'block';
+    document.querySelectorAll('.tab-nav button').forEach(b => b.classList.remove('active'));
+    document.getElementById('btn-' + name.toLowerCase()).classList.add('active');
+}
+
 function saveProfile() {
-    userData = {
-        name: document.getElementById('p-name').value,
-        pos: document.getElementById('p-pos').value,
-        level: document.getElementById('p-level').value
-    };
+    userData = { name: document.getElementById('p-name').value, pos: document.getElementById('p-pos').value, level: document.getElementById('p-level').value };
+    if(!userData.name) return alert("Enter Name!");
     localStorage.setItem('devotee_meta', JSON.stringify(userData));
-    alert("Profile Saved!");
     location.reload();
 }
 
-async function handleSubmit(e) {
-    e.preventDefault();
-    if (!userData.name) return alert("Pehle Profile save karein!");
-
-    const d = {
-        sleep: document.getElementById('s-sleep').value,
-        wakeup: document.getElementById('s-wakeup').value,
-        chanting: document.getElementById('s-chanting').value,
-        read: parseInt(document.getElementById('s-read').value) || 0,
-        hear: parseInt(document.getElementById('s-hear').value) || 0,
-        service: parseInt(document.getElementById('s-service').value) || 0,
-        notes: parseInt(document.getElementById('s-notes').value) || 0,
-        daySleep: parseInt(document.getElementById('s-daysleep').value) || 0,
-        date: document.getElementById('s-date').value
-    };
-
-    const total = calculateSadhanaScore(d);
-
-    try {
-        await db.collection('sadhana_logs').add({
-            ...d,
-            uName: userData.name,
-            uLevel: userData.level,
-            uPos: userData.pos,
-            totalScore: total,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-        alert(`Submitted! Total: ${total}/160`);
-    } catch (err) { console.error(err); }
-}
-
-// --- Reports (Always Visible to Admin) ---
 async function loadReports() {
-    const reportDiv = document.getElementById('report-output');
+    const out = document.getElementById('report-output');
     try {
-        const snap = await db.collection('sadhana_logs').orderBy('createdAt', 'desc').get();
+        const snap = await db.collection('sadhana_logs').orderBy('date', 'desc').get();
         let stats = {};
         snap.forEach(doc => {
-            let log = doc.data();
-            if (!stats[log.uName]) stats[log.uName] = { score: 0, level: log.uLevel };
-            stats[log.uName].score += log.totalScore;
+            let l = doc.data();
+            if(!stats[l.uName]) stats[l.uName] = { score: 0, level: l.uLevel };
+            stats[l.uName].score += l.score;
         });
-
-        let html = `<table border="1" style="width:100%; border-collapse:collapse;">
-                    <tr><th>Name</th><th>Level</th><th>Weekly Eff. %</th></tr>`;
-        for (let name in stats) {
-            let eff = ((stats[name].score / 1120) * 100).toFixed(1);
-            html += `<tr><td>${name}</td><td>${stats[name].level}</td><td>${eff}%</td></tr>`;
-        }
-        reportDiv.innerHTML = html + "</table>";
-    } catch (e) { console.error(e); }
+        let h = `<table><tr><th>Name</th><th>Level</th><th>Eff %</th></tr>`;
+        for(let n in stats) h += `<tr><td>${n}</td><td>${stats[n].level}</td><td><b>${((stats[n].score/1120)*100).toFixed(1)}%</b></td></tr>`;
+        out.innerHTML = h + `</table>`;
+    } catch(e) { console.log(e); }
 }
 
 window.onload = () => {
-    if (userData.name) {
-        document.getElementById('p-name').value = userData.name;
-        document.getElementById('p-pos').value = userData.pos;
-        document.getElementById('p-level').value = userData.level;
-        
-        // Hide/Show Notes Wrapper based on Senior Batch
-        if(document.getElementById('notes-wrapper')) {
-            document.getElementById('notes-wrapper').style.display = (userData.pos === "Senior Batch") ? "block" : "none";
-        }
-        loadReports();
-    }
-    document.getElementById('sadhana-form').addEventListener('submit', handleSubmit);
-    openTab(null, 'DailyEntry'); 
+    if(userData.name) {
+        document.getElementById('user-display').style.display = 'block';
+        document.getElementById('display-name').innerText = userData.name;
+        document.getElementById('display-meta').innerText = `${userData.pos} | ${userData.level}`;
+        document.getElementById('MainUI').style.display = 'block';
+        document.getElementById('ProfileEditor').style.display = 'none';
+        document.getElementById('notes-wrapper').style.display = (userData.pos === "Senior Batch") ? "block" : "none";
+        setupDateDropdown(); loadReports();
+    } else { showProfileEditor(); }
+};
+
+document.getElementById('sadhana-form').onsubmit = async (e) => {
+    e.preventDefault();
+    const d = {
+        date: document.getElementById('s-date').value,
+        sleep: document.getElementById('s-sleep').value, wakeup: document.getElementById('s-wakeup').value, chanting: document.getElementById('s-chanting').value,
+        read: parseInt(document.getElementById('s-read').value) || 0, hear: parseInt(document.getElementById('s-hear').value) || 0,
+        service: parseInt(document.getElementById('s-service').value) || 0, notes: parseInt(document.getElementById('s-notes').value) || 0,
+        daySleep: parseInt(document.getElementById('s-daysleep').value) || 0
+    };
+    const score = calculateSadhanaScore(d);
+    await db.collection('sadhana_logs').add({ ...d, uName: userData.name, uLevel: userData.level, score });
+    alert("Submit Successfully"); location.reload();
 };
