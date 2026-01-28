@@ -6,52 +6,44 @@
     <title>Coordinators Sadhana Tracker</title>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
-    
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', sans-serif; background: #f4f7f6; margin: 0; padding: 20px; }
-        .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 12px; shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        h1 { text-align: center; color: #2c3e50; }
-        
-        /* Tab Styles */
-        .tab { overflow: hidden; border-bottom: 2px solid #ccc; margin-bottom: 20px; }
-        .tab button { background-color: inherit; float: left; border: none; outline: none; cursor: pointer; padding: 14px 16px; transition: 0.3s; font-size: 17px; font-weight: 600; }
-        .tab button:hover { background-color: #ddd; }
-        .tab button.active { border-bottom: 3px solid #3498db; color: #3498db; }
-        .tab-content { display: none; padding: 6px 12px; }
-
-        /* Form Styles */
-        .input-group { margin-bottom: 15px; }
-        label { display: block; margin-bottom: 5px; font-weight: bold; }
-        input, select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
-        button.submit-btn { width: 100%; padding: 12px; background: #3498db; color: white; border: none; border-radius: 6px; font-size: 16px; cursor: pointer; }
-        
-        /* Table Styles */
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
-        th { background-color: #f2f2f2; }
+        body { font-family: sans-serif; background: #f4f4f4; padding: 15px; margin: 0; }
+        .container { max-width: 500px; margin: auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        header { text-align: center; margin-bottom: 20px; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+        .profile-info { font-size: 0.9em; color: #555; margin-top: 5px; }
+        .edit-link { color: #1a73e8; cursor: pointer; text-decoration: underline; font-size: 0.85em; }
+        .tab-nav { display: flex; border-bottom: 2px solid #ddd; margin-bottom: 20px; }
+        .tab-nav button { flex: 1; padding: 10px; border: none; background: none; font-weight: bold; cursor: pointer; }
+        .tab-nav button.active { border-bottom: 3px solid #1a73e8; color: #1a73e8; }
+        .section { display: none; }
+        .section.active { display: block; }
+        .input-group { margin-bottom: 12px; }
+        label { display: block; margin-bottom: 4px; font-weight: bold; font-size: 0.9em; }
+        input, select { width: 100%; padding: 10px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 5px; }
+        .btn { width: 100%; padding: 12px; background: #1a73e8; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.85em; margin-top: 10px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background: #f8f9fa; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>Coordinators Sadhana Tracker</h1>
-
-    <div class="tab">
-        <button class="tablinks active" onclick="openTab(event, 'Profile')">Profile</button>
-        <button class="tablinks" onclick="openTab(event, 'DailyEntry')">Daily Entry</button>
-        <button class="tablinks" onclick="openTab(event, 'Reports')">Reports</button>
-    </div>
-
-    <div id="Profile" class="tab-content" style="display:block;">
-        <h3>User Profile</h3>
-        <div class="input-group">
-            <label>Full Name</label>
-            <input type="text" id="p-name" placeholder="Enter your name">
+    <header id="app-header">
+        <h2 style="margin:0;">Coordinators Sadhana Tracker</h2>
+        <div id="user-display" style="display:none;">
+            <span id="display-name" style="font-weight:bold;"></span> 
+            <div class="profile-info">
+                <span id="display-meta"></span> | <span class="edit-link" onclick="showProfileEditor()">Edit Profile</span>
+            </div>
         </div>
+    </header>
+
+    <div id="ProfileEditor" class="section">
+        <div class="input-group"><label>Name</label><input type="text" id="p-name"></div>
         <div class="input-group">
             <label>Position</label>
-            <select id="p-pos" onchange="toggleNotesUI()">
+            <select id="p-pos">
                 <option value="Senior Batch">Senior Batch</option>
                 <option value="IGF Coordinator">IGF Coordinator</option>
                 <option value="Overall Coordinator">Overall Coordinator</option>
@@ -66,83 +58,51 @@
                 <option value="Level 4">Level 4</option>
             </select>
         </div>
-        <div class="input-group" id="admin-key-section">
-            <label>Admin Key (Optional)</label>
-            <input type="password" id="admin-key" placeholder="Enter key for Admin access">
+        <button class="btn" onclick="saveProfile()">Save & Continue</button>
+    </div>
+
+    <div id="MainUI" style="display:none;">
+        <div class="tab-nav">
+            <button id="btn-entry" class="active" onclick="showTab('Entry')">Daily Entry</button>
+            <button id="btn-reports" onclick="showTab('Reports')">Reports</button>
         </div>
-        <button class="submit-btn" onclick="saveProfile()">Save Profile</button>
-    </div>
 
-    <div id="DailyEntry" class="tab-content">
-        <h3>Daily Sadhana Log</h3>
-        <form id="sadhana-form">
-            <div class="input-group">
-                <label>Date</label>
-                <input type="date" id="s-date" required>
-            </div>
-            <div class="input-group">
-                <label>Sleep Time (Nidra)</label>
-                <input type="time" id="s-sleep" required>
-            </div>
-            <div class="input-group">
-                <label>Wakeup Time</label>
-                <input type="time" id="s-wakeup" required>
-            </div>
-            <div class="input-group">
-                <label>Chanting Finish Time</label>
-                <input type="time" id="s-chanting" required>
-            </div>
-            <div class="input-group">
-                <label>Reading (Minutes)</label>
-                <input type="number" id="s-read" value="0">
-            </div>
-            <div class="input-group">
-                <label>Hearing (Minutes)</label>
-                <input type="number" id="s-hear" value="0">
-            </div>
-            <div class="input-group">
-                <label>Service (Minutes)</label>
-                <input type="number" id="s-service" value="0">
-            </div>
-            <div class="input-group" id="notes-wrapper" style="display:none;">
-                <label>Notes Revision (Minutes)</label>
-                <input type="number" id="s-notes" value="0">
-            </div>
-            <div class="input-group">
-                <label>Day Sleep (Minutes)</label>
-                <input type="number" id="s-daysleep" value="0">
-            </div>
-            <button type="submit" class="submit-btn">Submit Daily Log</button>
-        </form>
-    </div>
+        <div id="EntryTab" class="section active">
+            <form id="sadhana-form">
+                <div class="input-group"><label>Date</label><select id="s-date" required></select></div>
+                <div class="input-group"><label>Sleep Time</label><input type="time" id="s-sleep" required></div>
+                <div class="input-group"><label>Wakeup Time</label><input type="time" id="s-wakeup" required></div>
+                <div class="input-group"><label>Chanting Finish</label><input type="time" id="s-chanting" required></div>
+                <div class="input-group"><label>Reading (Mins)</label><input type="number" id="s-read" value="0"></div>
+                <div class="input-group"><label>Hearing (Mins)</label><input type="number" id="s-hear" value="0"></div>
+                <div class="input-group"><label>Service (Mins)</label><input type="number" id="s-service" value="0"></div>
+                <div id="notes-wrapper" class="input-group" style="display:none;">
+                    <label>Notes Revision (Mins)</label>
+                    <input type="number" id="s-notes" value="0">
+                </div>
+                <div class="input-group"><label>Day Sleep (Mins)</label><input type="number" id="s-daysleep" value="0"></div>
+                <button type="submit" class="btn">Submit Today's Log</button>
+            </form>
+        </div>
 
-    <div id="Reports" class="tab-content">
-        <h3>Sadhana Efficiency Report</h3>
-        <div id="report-output">
-            </div>
+        <div id="ReportsTab" class="section">
+            <div id="report-output"></div>
+        </div>
     </div>
 </div>
 
 <script>
-    // Paste your Firebase Config here (KEEP YOUR ORIGINAL CONFIG)
     const firebaseConfig = { 
-        apiKey: "YOUR_API_KEY",
-        authDomain: "YOUR_AUTH_DOMAIN",
-        projectId: "YOUR_PROJECT_ID",
-        storageBucket: "YOUR_STORAGE_BUCKET",
-        messagingSenderId: "YOUR_SENDER_ID",
-        appId: "YOUR_APP_ID"
+        apiKey: "AIzaSyAs7-YourKey", 
+        authDomain: "coordinators-tracker.firebaseapp.com",
+        projectId: "coordinators-tracker",
+        storageBucket: "coordinators-tracker.appspot.com",
+        messagingSenderId: "987212345678",
+        appId: "1:987212345678:web:abcdef12345"
     };
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
-
-    // Small helper for the Notes field visibility inside index.html
-    function toggleNotesUI() {
-        const pos = document.getElementById('p-pos').value;
-        document.getElementById('notes-wrapper').style.display = (pos === "Senior Batch") ? "block" : "none";
-    }
 </script>
 <script src="app.js"></script>
-
 </body>
 </html>
