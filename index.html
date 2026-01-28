@@ -3,43 +3,43 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Coordinators Sadhana Tracker</title>
+    <title>Sadhana Tracker</title>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
     <style>
         body { font-family: sans-serif; background: #f4f4f4; padding: 15px; margin: 0; }
         .container { max-width: 500px; margin: auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        header { text-align: center; margin-bottom: 20px; border-bottom: 1px solid #eee; padding-bottom: 10px; }
-        .profile-info { font-size: 0.9em; color: #555; margin-top: 5px; }
-        .edit-link { color: #1a73e8; cursor: pointer; text-decoration: underline; font-size: 0.85em; }
-        .tab-nav { display: flex; border-bottom: 2px solid #ddd; margin-bottom: 20px; }
-        .tab-nav button { flex: 1; padding: 10px; border: none; background: none; font-weight: bold; cursor: pointer; }
+        header { background: #1a73e8; color: white; padding: 15px; border-radius: 10px 10px 0 0; text-align: left; }
+        .edit-link { font-size: 0.8em; text-decoration: underline; cursor: pointer; opacity: 0.9; }
+        .tab-nav { display: flex; border-bottom: 2px solid #ddd; }
+        .tab-nav button { flex: 1; padding: 12px; border: none; background: none; cursor: pointer; font-weight: bold; }
         .tab-nav button.active { border-bottom: 3px solid #1a73e8; color: #1a73e8; }
-        .section { display: none; }
+        .section { display: none; padding: 20px 0; }
         .section.active { display: block; }
-        .input-group { margin-bottom: 12px; }
-        label { display: block; margin-bottom: 4px; font-weight: bold; font-size: 0.9em; }
-        input, select { width: 100%; padding: 10px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 5px; }
-        .btn { width: 100%; padding: 12px; background: #1a73e8; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
-        table { width: 100%; border-collapse: collapse; font-size: 0.85em; margin-top: 10px; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        .input-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; font-size: 0.9em; }
+        input, select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; }
+        .btn { width: 100%; padding: 15px; background: #1a73e8; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; font-size: 0.9em; }
         th { background: #f8f9fa; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <header id="app-header">
-        <h2 style="margin:0;">Coordinators Sadhana Tracker</h2>
-        <div id="user-display" style="display:none;">
-            <span id="display-name" style="font-weight:bold;"></span> 
-            <div class="profile-info">
-                <span id="display-meta"></span> | <span class="edit-link" onclick="showProfileEditor()">Edit Profile</span>
+    <header id="main-header" style="display:none;">
+        <div style="display:flex; justify-content: space-between; align-items: center;">
+            <div>
+                <h3 id="display-name" style="margin:0;"></h3>
+                <div id="display-meta" style="font-size:0.8em;"></div>
             </div>
+            <span class="edit-link" onclick="showProfileEditor()">Edit Profile</span>
         </div>
     </header>
 
-    <div id="ProfileEditor" class="section">
+    <div id="ProfileEditor" class="section active">
+        <h3>User Profile</h3>
         <div class="input-group"><label>Name</label><input type="text" id="p-name"></div>
         <div class="input-group">
             <label>Position</label>
@@ -51,19 +51,22 @@
         </div>
         <div class="input-group">
             <label>Level</label>
-            <select id="p-level">
-                <option value="Level 1">Level 1</option>
-                <option value="Level 2">Level 2</option>
-                <option value="Level 3">Level 3</option>
-                <option value="Level 4">Level 4</option>
+            <select id="p-level"><option value="Level 4">Level 4</option><option value="Level 1">Level 1</option></select>
+        </div>
+        <div class="input-group">
+            <label>Chanting Rounds</label>
+            <select id="p-rounds">
+                <option value="16">16 Rounds</option>
+                <option value="12">12 Rounds</option>
+                <option value="8">8 Rounds</option>
             </select>
         </div>
-        <button class="btn" onclick="saveProfile()">Save & Continue</button>
+        <button class="btn" onclick="saveProfile()">Save Profile</button>
     </div>
 
     <div id="MainUI" style="display:none;">
         <div class="tab-nav">
-            <button id="btn-entry" class="active" onclick="showTab('Entry')">Daily Entry</button>
+            <button id="btn-entry" class="active" onclick="showTab('Entry')">Entry</button>
             <button id="btn-reports" onclick="showTab('Reports')">Reports</button>
         </div>
 
@@ -76,12 +79,9 @@
                 <div class="input-group"><label>Reading (Mins)</label><input type="number" id="s-read" value="0"></div>
                 <div class="input-group"><label>Hearing (Mins)</label><input type="number" id="s-hear" value="0"></div>
                 <div class="input-group"><label>Service (Mins)</label><input type="number" id="s-service" value="0"></div>
-                <div id="notes-wrapper" class="input-group" style="display:none;">
-                    <label>Notes Revision (Mins)</label>
-                    <input type="number" id="s-notes" value="0">
-                </div>
+                <div id="notes-wrapper" class="input-group" style="display:none;"><label>Notes Revision (Mins)</label><input type="number" id="s-notes" value="0"></div>
                 <div class="input-group"><label>Day Sleep (Mins)</label><input type="number" id="s-daysleep" value="0"></div>
-                <button type="submit" class="btn">Submit Today's Log</button>
+                <button type="submit" class="btn">Submit Sadhana</button>
             </form>
         </div>
 
@@ -92,15 +92,9 @@
 </div>
 
 <script>
-    const firebaseConfig = { 
-        apiKey: "AIzaSyAs7-YourKey", 
-        authDomain: "coordinators-tracker.firebaseapp.com",
-        projectId: "coordinators-tracker",
-        storageBucket: "coordinators-tracker.appspot.com",
-        messagingSenderId: "987212345678",
-        appId: "1:987212345678:web:abcdef12345"
-    };
-    firebase.initializeApp(firebaseConfig);
+    // Replace with your actual Firebase config
+    const firebaseConfig = { apiKey: "AIzaSy...", projectId: "...", ... };
+    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 </script>
 <script src="app.js"></script>
