@@ -96,7 +96,7 @@ document.getElementById('sadhana-form').onsubmit = async (e) => {
         ...d, scores: res.sc, totalScore: res.total,
         submittedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
-    alert(`Jai Ho! Score: ${res.total}`);
+    alert(`Sadhana Submitted successfully! Score: ${res.total}`);
     location.reload();
 };
 
