@@ -1,4 +1,4 @@
-// --- 1. FIREBASE SETUP (Your Provided Config) ---
+// --- FIREBASE CONFIG ---
 const firebaseConfig = {
     apiKey: "AIzaSyDbRy8ZMJAWeTyZVnTphwRIei6jAckagjA",
     authDomain: "sadhana-tracker-b65ff.firebaseapp.com",
@@ -7,12 +7,11 @@ const firebaseConfig = {
     messagingSenderId: "926961218888",
     appId: "1:926961218888:web:db8f12ef8256d13f036f7d"
 };
-if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth(), db = firebase.firestore();
-
 let currentUser = null, userProfile = null;
 
-// --- 2. CORE HELPERS ---
+// --- STRICT SCORING ENGINE ---
 const t2m = (t, isSleep = false) => {
     if (!t || t === "NR") return 9999;
     let [h, m] = t.split(':').map(Number);
@@ -20,61 +19,67 @@ const t2m = (t, isSleep = false) => {
     return h * 60 + m;
 };
 
-// Strict Penalty Logic: 5 mins gap = -5 marks. 0 mins = -5 marks.
-const getSlabScore = (val, target, max) => {
-    if (val <= 0) return -5;
-    if (val >= target) return max;
-    let penalty = Math.ceil((target - val) / 5) * 5;
-    return Math.max(-5, max - penalty);
-};
-
-// --- 3. POSITION-BASED SCORING ENGINE ---
 function calculateSadhana(d, cat) {
     let sc = { sleep: -5, wakeup: -5, chanting: -5, reading: -5, hearing: -5, service: -5, notes: 0, daySleep: 0 };
+    
+    // Sleep & Wakeup
+    sc.sleep = (t2m(d.sleep, true) <= 1350) ? 25 : Math.max(-5, 25 - (Math.ceil((t2m(d.sleep, true) - 1350) / 5) * 5));
+    sc.wakeup = (t2m(d.wakeup) <= 305) ? 25 : Math.max(-5, 25 - (Math.ceil((t2m(d.wakeup) - 305) / 5) * 5));
 
-    // Sleep (10:30 PM = 1350m)
-    const slp = t2m(d.sleep, true);
-    sc.sleep = (slp <= 1350) ? 25 : Math.max(-5, 25 - (Math.ceil((slp - 1350) / 5) * 5));
-
-    // Wakeup (5:05 AM = 305m)
-    const wak = t2m(d.wakeup);
-    sc.wakeup = (wak <= 305) ? 25 : Math.max(-5, 25 - (Math.ceil((wak - 305) / 5) * 5));
-
-    // Chanting Finish (Buckets as per PRD)
+    // Chanting Finish (PRD Jan 27)
     const ch = t2m(d.chanting);
-    if(ch <= 540) sc.chanting = 25;       // 9:00 AM
-    else if(ch <= 570) sc.chanting = 20;  // 9:30 AM
-    else if(ch <= 660) sc.chanting = 15;  // 11:00 AM
-    else if(ch <= 870) sc.chanting = 10;  // 2:30 PM
-    else if(ch <= 1020) sc.chanting = 5;  // 5:00 PM
-    else if(ch <= 1140) sc.chanting = 0;  // 7:00 PM
+    if(ch <= 540) sc.chanting = 25; 
+    else if(ch <= 570) sc.chanting = 20; 
+    else if(ch <= 660) sc.chanting = 15;
+    else if(ch <= 870) sc.chanting = 10; 
+    else if(ch <= 1020) sc.chanting = 5; 
+    else if(ch <= 1140) sc.chanting = 0; 
     else sc.chanting = -5;
 
-    // Reading & Hearing (Target 30m for ALL)
-    sc.reading = getSlabScore(d.reading, 30, 25);
-    sc.hearing = getSlabScore(d.hearing, 30, 25);
+    // Reading & Hearing (Target 30m)
+    const getSlab = (v, t, m) => v <= 0 ? -5 : (v >= t ? m : Math.max(-5, m - (Math.ceil((t - v) / 5) * 5)));
+    sc.reading = getSlab(d.reading, 30, 25);
+    sc.hearing = getSlab(d.hearing, 30, 25);
 
-    // Position Specific Logic
+    // SERVICE LOGIC (Strict Penalty)
     if (cat === "Senior Batch") {
-        sc.service = getSlabScore(d.service, 15, 10); // Senior Target 15m
-        sc.notes = getSlabScore(d.notes, 20, 15);      // Senior Target 20m
+        if (d.service > 15) {
+            sc.service = 10 - ((d.service - 15) * 5); // -5 per extra minute
+        } else {
+            sc.service = getSlab(d.service, 15, 10);
+        }
+        sc.notes = getSlab(d.notes, 20, 15);
     } else {
-        sc.service = getSlabScore(d.service, 30, 25); // Others Target 30m
-        sc.notes = 0;
+        sc.service = getSlab(d.service, 30, 25);
     }
 
-    // Day Sleep
-    sc.daySleep = (d.daySleep === 0) ? 10 : (d.daySleep <= 60 ? 5 : -5);
+    // DAY SLEEP (Strict Jump)
+    if (d.daySleep === 0) sc.daySleep = 10;
+    else if (d.daySleep <= 60) sc.daySleep = 5;
+    else sc.daySleep = -5; // Sidha -5 if > 60
 
-    const total = sc.sleep + sc.wakeup + sc.chanting + sc.reading + sc.hearing + sc.service + sc.notes + sc.daySleep;
+    const total = Object.values(sc).reduce((a, b) => a + b, 0);
     return { sc, total };
 }
 
-// --- 4. DATA SUBMISSION (Synced with Rules) ---
+// --- CORE HANDLERS ---
+auth.onAuthStateChanged(async (user) => {
+    if (user) {
+        currentUser = user;
+        const doc = await db.collection('users').doc(user.uid).get();
+        if (doc.exists) {
+            userProfile = doc.data();
+            document.getElementById('user-display-name').innerText = `${userProfile.name} (${userProfile.category})`;
+            showSection('dashboard'); setupDateSelect();
+        } else showSection('profile');
+    } else showSection('auth');
+});
+
 document.getElementById('sadhana-form').onsubmit = async (e) => {
     e.preventDefault();
     const d = {
         uid: currentUser.uid,
+        name: userProfile.name,
         date: document.getElementById('sadhana-date').value,
         sleep: document.getElementById('sleep-time').value,
         wakeup: document.getElementById('wakeup-time').value,
@@ -86,64 +91,33 @@ document.getElementById('sadhana-form').onsubmit = async (e) => {
         daySleep: parseInt(document.getElementById('day-sleep-minutes').value) || 0
     };
 
-    const result = calculateSadhana(d, userProfile.category);
-    
-    // Note: match/sadhana_logs rules ke hisaab se collection name change kiya
+    const res = calculateSadhana(d, userProfile.category);
     await db.collection('sadhana_logs').doc(`${currentUser.uid}_${d.date}`).set({
-        ...d,
-        scores: result.sc,
-        totalScore: result.total,
-        dayPercent: Math.round((result.total / 160) * 100),
+        ...d, scores: res.sc, totalScore: res.total,
         submittedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
-
-    alert("Jai Ho! Score: " + result.total);
+    alert(`Jai Ho! Score: ${res.total}`);
     location.reload();
 };
 
-// --- 5. AUTH & UI HANDLERS ---
-auth.onAuthStateChanged(async (user) => {
-    if (user) {
-        currentUser = user;
-        const doc = await db.collection('users').doc(user.uid).get();
-        if (doc.exists) {
-            userProfile = doc.data();
-            document.getElementById('user-display-name').innerText = `${userProfile.name} [${userProfile.category}]`;
-            if (userProfile.category === "Senior Batch") document.getElementById('notes-area').classList.remove('hidden');
-            showSection('dashboard');
-        } else {
-            showSection('profile');
-        }
-    } else {
-        showSection('auth');
-    }
-});
-
-// Profile Save Logic
-document.getElementById('profile-form').onsubmit = async (e) => {
-    e.preventDefault();
-    const profileData = {
-        name: document.getElementById('profile-name').value,
-        category: document.getElementById('profile-category').value,
-        level: document.getElementById('profile-level').value,
-        exactRounds: document.getElementById('profile-exact-rounds').value,
-        isAdmin: false
-    };
-    await db.collection('users').doc(currentUser.uid).set(profileData);
-    location.reload();
+// Excel Export function (Requires SheetJS script in HTML)
+window.exportToExcel = async () => {
+    const snap = await db.collection('sadhana_logs').where('uid', '==', currentUser.uid).get();
+    const data = snap.docs.map(doc => ({ Date: doc.data().date, Total: doc.data().totalScore, ...doc.data().scores }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "MySadhana");
+    XLSX.writeFile(wb, "Sadhana_Report.xlsx");
 };
 
-// Toggle Sections
+function setupDateSelect() {
+    const s = document.getElementById('sadhana-date');
+    const d = new Date(), y = new Date(); y.setDate(d.getDate()-1);
+    const f = (dt) => dt.toISOString().split('T')[0];
+    s.innerHTML = `<option value="${f(d)}">${f(d)}</option><option value="${f(y)}">${f(y)}</option>`;
+}
+
 function showSection(id) {
     document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
     document.getElementById(id + '-section').classList.remove('hidden');
 }
-
-// Tab Switching
-window.switchTab = (t) => {
-    document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.getElementById(t + '-tab').classList.remove('hidden');
-    const btn = document.querySelector(`button[onclick*="switchTab('${t}')"]`);
-    if(btn) btn.classList.add('active');
-};
