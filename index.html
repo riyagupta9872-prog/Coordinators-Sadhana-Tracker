@@ -11,9 +11,9 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="container">
+    <div class="container" id="app">
         <section id="auth-section" class="card">
-            <h2 style="text-align:center;">Sadhana Tracker</h2>
+            <h2 style="text-align:center;">Coordinators Sadhana Tracker</h2>
             <form id="login-form">
                 <input type="email" id="login-email" placeholder="Email" required>
                 <input type="password" id="login-password" placeholder="Password" required>
@@ -35,7 +35,7 @@
                 </select>
 
                 <label>Chanting Category (Rounds):</label>
-                <select id="profile-chanting-cat" required>
+                <select id="profile-chanting" required>
                     <option value="Level-1">0-4 Rounds</option>
                     <option value="Level-2">5-8 Rounds</option>
                     <option value="Level-3">9-16 Rounds</option>
@@ -43,21 +43,22 @@
                 </select>
 
                 <input type="number" id="profile-exact-rounds" placeholder="Current Exact Rounds" required>
-                <button type="submit">Save Profile</button>
+                <button type="submit">Save & Lock Profile</button>
+                <button type="button" id="cancel-edit" class="hidden" onclick="showSection('dashboard')" style="background:#95a5a6; margin-top:10px;">Cancel</button>
             </form>
         </section>
 
         <section id="dashboard-section" class="hidden">
-            <div class="header" style="display:flex; justify-content:space-between; align-items:center; background:white; padding:15px; border-radius:8px; margin-bottom:10px;">
-                <div>
-                    <strong id="user-display-name"></strong>
-                </div>
-                <button id="logout-btn" style="width:auto; padding:8px 15px; background:#e74c3c;">Logout</button>
+            <div class="header" style="display:flex; justify-content:space-between; align-items:center; background:#f8f9fa; padding:15px; border-radius:8px; margin-bottom:15px;">
+                <div><strong id="user-display-name"></strong></div>
+                <button id="logout-btn" style="width:auto; padding:8px 15px; background:var(--danger)">Logout</button>
             </div>
 
-            <div class="nav-tabs" style="display:flex; gap:10px; margin-bottom:20px;">
-                <button class="tab-btn active" onclick="switchTab('sadhana')">Daily Entry</button>
-                <button class="tab-btn" onclick="switchTab('reports')">My Reports</button>
+            <div class="nav-tabs">
+                <button class="tab-btn active" onclick="switchTab('sadhana')">Entry</button>
+                <button class="tab-btn" onclick="switchTab('reports')">Reports</button>
+                <button id="admin-nav-btn" class="tab-btn hidden" onclick="switchTab('admin')">Admin</button>
+                <button onclick="openProfileEdit()" style="background:#7f8c8d; width:auto; margin-left:auto">Edit Profile</button>
             </div>
 
             <div id="sadhana-tab" class="tab-content">
@@ -66,33 +67,49 @@
                     <label>Sleep Time:</label><input type="time" id="sleep-time" required>
                     <label>Wakeup Time:</label><input type="time" id="wakeup-time" required>
                     <label>Chanting Finish:</label><input type="time" id="chanting-time" required>
-                    
-                    <label>Reading (Mins):</label>
-                    <input type="number" id="reading-mins" value="0" required>
+                    <label>Reading (Mins):</label><input type="number" id="reading-mins" value="0" required>
+                    <label>Hearing (Mins):</label><input type="number" id="hearing-mins" value="0" required>
+                    <label>Service (Mins):</label><input type="number" id="service-mins" value="0" required>
 
-                    <label>Hearing (Mins):</label>
-                    <input type="number" id="hearing-mins" value="0" required>
-
-                    <label>Service (Mins):</label>
-                    <input type="number" id="service-mins" value="0" required>
-
-                    <div id="notes-revision-area" class="hidden">
-                        <label style="color: #2c3e50; font-weight: bold;">Notes Revision (Mins):</label>
+                    <div id="senior-area" class="hidden">
+                        <label style="color:var(--primary); font-weight:bold;">Notes Revision (Mins):</label>
                         <input type="number" id="notes-mins" value="0">
                     </div>
 
-                    <label>Day Sleep (Mins):</label>
-                    <input type="number" id="day-sleep-minutes" value="0" required>
-                    
-                    <button type="submit" style="background:#27ae60;">Submit Sadhana</button>
+                    <label>Day Sleep (Mins):</label><input type="number" id="day-sleep-minutes" value="0" required>
+                    <button type="submit" style="background:var(--success)">Submit Daily Sadhana</button>
                 </form>
             </div>
 
             <div id="reports-tab" class="tab-content hidden">
+                <button onclick="downloadUserExcel(currentUser.uid, userProfile.name)" style="background:var(--success); margin-bottom:15px">Download My History (Excel)</button>       
                 <div id="weekly-reports-container"></div>
+            </div>
+
+            <div id="admin-tab" class="tab-content hidden">
+                <div style="display:flex; gap:10px; margin-bottom:15px">
+                    <button onclick="downloadMasterReport()" style="background:var(--success)">Download Master Comparative Excel</button>
+                </div>
+                <div class="card" style="overflow-x:auto">
+                    <h3>4-Week Performance (%)</h3>
+                    <div id="admin-comparative-reports-container"></div>
+                </div>
+                <div class="card">
+                    <h3>User Management</h3>
+                    <div id="admin-users-list"></div>
+                </div>
             </div>
         </section>
     </div>
+
+    <div id="user-report-modal" class="modal hidden">
+        <div class="modal-content">
+            <span onclick="closeUserModal()" style="position:absolute; right:20px; top:20px; cursor:pointer; font-size:24px; font-weight:bold;">&times;</span>
+            <h2 id="modal-user-name" style="margin-top:0"></h2>
+            <div id="modal-report-container"></div>
+        </div>
+    </div>
+
     <script src="app.js"></script>
 </body>
 </html>
