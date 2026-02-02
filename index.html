@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sadhana Tracker 2026</title>
+    <title>Sadhana Tracker</title>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
@@ -13,7 +13,7 @@
 <body>
     <div class="container">
         <section id="auth-section" class="card">
-            <h2>Sadhana Tracker Login</h2>
+            <h2>Login</h2>
             <form id="login-form">
                 <input type="email" id="login-email" placeholder="Email" required>
                 <input type="password" id="login-password" placeholder="Password" required>
@@ -22,64 +22,54 @@
         </section>
 
         <section id="profile-section" class="card hidden">
-            <h2>Complete Your Profile</h2>
+            <h2>Complete Profile</h2>
             <form id="profile-form">
                 <input type="text" id="profile-name" placeholder="Full Name" required>
                 <select id="profile-category" required>
-                    <option value="">Select Category (Position)</option>
+                    <option value="">Select Category</option>
                     <option value="Senior Batch">Senior Batch</option>
                     <option value="IGF_COORDINATORS">IGF_COORDINATORS</option>
                     <option value="Youth Overall Coordinator">Youth Overall Coordinator</option>
                 </select>
                 <select id="profile-level" required>
-                    <option value="">Select Chanting Level</option>
+                    <option value="">Select Level</option>
                     <option value="Level 1 (1-4 Rounds)">Level 1 (1-4 Rounds)</option>
                     <option value="Level 2 (5-8 Rounds)">Level 2 (5-8 Rounds)</option>
                     <option value="Level 3 (9-16 Rounds)">Level 3 (9-16 Rounds)</option>
                     <option value="Level 4 (16+ Rounds)">Level 4 (16+ Rounds)</option>
                 </select>
                 <input type="number" id="profile-exact-rounds" placeholder="Exact Rounds" required>
-                <button type="submit">Save & Lock Profile</button>
+                <button type="submit">Save Profile</button>
             </form>
         </section>
 
         <section id="dashboard-section" class="hidden">
-            <div class="header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-                <div><strong id="user-display-name"></strong></div>
-                <button id="logout-btn" style="width:auto; background:#e74c3c; padding:8px 15px;">Logout</button>
+            <div style="display:flex; justify-content:space-between; padding:10px;">
+                <h3 id="user-display-name">Loading...</h3>
+                <button id="logout-btn" style="background:red; width:auto; padding:5px 15px;">Logout</button>
             </div>
 
-            <div class="nav-tabs">
+            <div class="nav-tabs" style="display:flex; gap:10px; margin-bottom:10px;">
                 <button class="tab-btn active" onclick="switchTab('sadhana')">Daily Entry</button>
                 <button class="tab-btn" onclick="switchTab('reports')">My Reports</button>
-                <button onclick="showSection('profile')" style="background:#7f8c8d; width:auto;">Edit Profile</button>
             </div>
+            
+            <button onclick="showSection('profile')" style="background:#7f8c8d; width:auto; margin-bottom:20px;">Edit Profile</button>
 
             <div id="sadhana-tab" class="tab-content">
                 <form id="sadhana-form">
-                    <label>Date:</label><select id="sadhana-date" required></select>
-                    <label>Sleep (Target 10:30 PM):</label><input type="time" id="sleep-time" required>
-                    <label>Wake Up (Target 5:05 AM):</label><input type="time" id="wakeup-time" required>
-                    <label>Chanting Finish (Target 9:00 AM):</label><input type="time" id="chanting-time" required>
-                    
-                    <label>Reading (Minutes):</label>
-                    <input type="number" id="reading-mins" placeholder="Minutes" required min="0">
-
-                    <label>Hearing (Minutes):</label>
-                    <input type="number" id="hearing-mins" placeholder="Minutes" required min="0">
-
-                    <label>Service/Seva (Minutes):</label>
-                    <input type="number" id="service-mins" placeholder="Minutes" required min="0">
-
+                    <label>Date:</label><select id="sadhana-date"></select>
+                    <label>Sleep (10:30 PM):</label><input type="time" id="sleep-time" required>
+                    <label>Wakeup (5:05 AM):</label><input type="time" id="wakeup-time" required>
+                    <label>Chanting (9:00 AM):</label><input type="time" id="chanting-time" required>
+                    <label>Reading (Mins):</label><input type="number" id="reading-mins" value="0" required>
+                    <label>Hearing (Mins):</label><input type="number" id="hearing-mins" value="0" required>
+                    <label>Service (Mins):</label><input type="number" id="service-mins" value="0" required>
                     <div id="notes-area" class="hidden">
-                        <label>Notes Revision (Minutes):</label>
-                        <input type="number" id="notes-mins" placeholder="Minutes" value="0">
+                        <label>Notes Rev (Mins):</label><input type="number" id="notes-mins" value="0">
                     </div>
-
-                    <label>Day Sleep (Minutes):</label>
-                    <input type="number" id="day-sleep-minutes" value="0" required>
-                    
-                    <button type="submit" style="background: #27ae60;">Submit Sadhana</button>
+                    <label>Day Sleep (Mins):</label><input type="number" id="day-sleep-minutes" value="0" required>
+                    <button type="submit" style="background:green;">Submit</button>
                 </form>
             </div>
 
