@@ -13,7 +13,7 @@
 <body>
     <div class="container">
         <section id="auth-section" class="card">
-            <h2>Coordinators Sadhana Tracker</h2>
+            <h2 style="text-align:center;">Sadhana Tracker</h2>
             <form id="login-form">
                 <input type="email" id="login-email" placeholder="Email" required>
                 <input type="password" id="login-password" placeholder="Password" required>
@@ -22,58 +22,74 @@
         </section>
 
         <section id="profile-section" class="card hidden">
-            <h2>User Profile</h2>
+            <h2>Complete Your Profile</h2>
             <form id="profile-form">
                 <input type="text" id="profile-name" placeholder="Full Name" required>
-                <select id="profile-category" required>
-                    <option value="">Select Position</option>
-                    <option value="Senior Batch">Senior Batch</option>
-                    <option value="IGF_COORDINATORS">IGF_COORDINATORS</option>
-                    <option value="Youth Overall Coordinator">Youth Overall Coordinator</option>
-                </select>
+                
+                <label>Select Level / Position:</label>
                 <select id="profile-level" required>
-                    <option value="">Select Chanting Level</option>
-                    <option value="Level 1 (1-4 Rounds)">Level 1 (1-4 Rounds)</option>
-                    <option value="Level 2 (5-8 Rounds)">Level 2 (5-8 Rounds)</option>
-                    <option value="Level 3 (9-16 Rounds)">Level 3 (9-16 Rounds)</option>
-                    <option value="Level 4 (16+ Rounds)">Level 4 (16+ Rounds)</option>
+                    <option value="">-- Choose Position --</option>
+                    <option value="Senior Batch">Level 1 (Senior Batch)</option>
+                    <option value="IGF_COORDINATORS">Level 2 (IGF_Coordinators)</option>
+                    <option value="Youth Overall Coordinator">Level 3 (Youth Overall Coordinator)</option>
                 </select>
-                <input type="number" id="profile-exact-rounds" placeholder="Exact Rounds" required>
-                <button type="submit">Save & Update Profile</button>
+
+                <label>Chanting Category (Rounds):</label>
+                <select id="profile-chanting-cat" required>
+                    <option value="Level-1">0-4 Rounds</option>
+                    <option value="Level-2">5-8 Rounds</option>
+                    <option value="Level-3">9-16 Rounds</option>
+                    <option value="Level-4">16+ Rounds</option>
+                </select>
+
+                <input type="number" id="profile-exact-rounds" placeholder="Current Exact Rounds" required>
+                <button type="submit">Save Profile</button>
             </form>
         </section>
 
         <section id="dashboard-section" class="hidden">
-            <div style="display:flex; justify-content:space-between; align-items:center; background:#f4f4f4; padding:10px; border-radius:8px;">
-                <span id="user-display-name" style="font-weight:bold;"></span>
-                <button id="logout-btn" style="background:#e74c3c; width:auto; padding:5px 15px; font-size:14px;">Logout</button>
+            <div class="header" style="display:flex; justify-content:space-between; align-items:center; background:white; padding:15px; border-radius:8px; margin-bottom:10px;">
+                <div>
+                    <strong id="user-display-name"></strong>
+                </div>
+                <button id="logout-btn" style="width:auto; padding:8px 15px; background:#e74c3c;">Logout</button>
             </div>
 
-            <div class="nav-tabs" style="margin-top:15px; display:flex; gap:10px;">
-                <button class="tab-btn active" onclick="switchTab('sadhana')">Entry</button>
-                <button class="tab-btn" onclick="switchTab('reports')">Reports</button>
-                <button onclick="showSection('profile')" style="background:#7f8c8d; width:auto;">Edit Profile</button>
+            <div class="nav-tabs" style="display:flex; gap:10px; margin-bottom:20px;">
+                <button class="tab-btn active" onclick="switchTab('sadhana')">Daily Entry</button>
+                <button class="tab-btn" onclick="switchTab('reports')">My Reports</button>
             </div>
 
             <div id="sadhana-tab" class="tab-content">
                 <form id="sadhana-form">
-                    <label>Sadhana Date:</label><select id="sadhana-date"></select>
-                    <label>Sleep Time (Target 10:30 PM):</label><input type="time" id="sleep-time" required>
-                    <label>Wakeup Time (Target 5:05 AM):</label><input type="time" id="wakeup-time" required>
-                    <label>Chanting Finish (Target 9:00 AM):</label><input type="time" id="chanting-time" required>
-                    <label>Reading (Minutes):</label><input type="number" id="reading-mins" value="0" required>
-                    <label>Hearing (Minutes):</label><input type="number" id="hearing-mins" value="0" required>
-                    <label>Service/Seva (Minutes):</label><input type="number" id="service-mins" value="0" required>
-                    <div id="notes-area" class="hidden">
-                        <label>Notes Revision (Minutes):</label><input type="number" id="notes-mins" value="0">
+                    <label>Date:</label><select id="sadhana-date" required></select>
+                    <label>Sleep Time:</label><input type="time" id="sleep-time" required>
+                    <label>Wakeup Time:</label><input type="time" id="wakeup-time" required>
+                    <label>Chanting Finish:</label><input type="time" id="chanting-time" required>
+                    
+                    <label>Reading (Mins):</label>
+                    <input type="number" id="reading-mins" value="0" required>
+
+                    <label>Hearing (Mins):</label>
+                    <input type="number" id="hearing-mins" value="0" required>
+
+                    <label>Service (Mins):</label>
+                    <input type="number" id="service-mins" value="0" required>
+
+                    <div id="notes-revision-area" class="hidden">
+                        <label style="color: #2c3e50; font-weight: bold;">Notes Revision (Mins):</label>
+                        <input type="number" id="notes-mins" value="0">
                     </div>
-                    <label>Day Sleep (Minutes):</label><input type="number" id="day-sleep-minutes" value="0" required>
-                    <button type="submit" style="background:#27ae60;">Submit Data</button>
+
+                    <label>Day Sleep (Mins):</label>
+                    <input type="number" id="day-sleep-minutes" value="0" required>
+                    
+                    <button type="submit" style="background:#27ae60;">Submit Sadhana</button>
                 </form>
             </div>
 
             <div id="reports-tab" class="tab-content hidden">
-                <div id="weekly-reports-container" style="margin-top:20px;"></div>
+                <div id="weekly-reports-container"></div>
             </div>
         </section>
     </div>
