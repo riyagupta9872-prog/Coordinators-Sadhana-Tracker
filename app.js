@@ -11,28 +11,21 @@ if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth(), db = firebase.firestore();
 let currentUser = null, userProfile = null;
 
-// --- 2. SCORING ENGINE (PRD STRICT LOGIC) ---
-const t2m = (t) => {
-    if(!t) return 9999;
-    let [h, m] = t.split(':').map(Number);
-    return h * 60 + m;
-};
-
+// --- SCORING ENGINE (STRICT PRD 160-MARK LOGIC) ---
 const calculateDetailedScore = (data) => {
-    let scores = { sleep: 0, wakeup: 0, chanting: 0, study: 0, daySleep: 0 };
+    let scores = { sleep: 0, wakeup: 0, chanting: 0, pathan: 0, shravan: 0, activity: 0, daySleep: 0 };
 
-    // Sleep (Thresholds: 10:00, 10:15, 10:30, 10:45, 11:00, 11:15, 11:30)
-    const sMin = t2m(data.sleepTime);
-    const adjustedSleep = (sMin <= 240) ? sMin + 1440 : sMin; // Handle midnight
-    if (adjustedSleep <= 1320) scores.sleep = 25; // 10:00 PM
-    else if (adjustedSleep <= 1335) scores.sleep = 20; // 10:15
-    else if (adjustedSleep <= 1350) scores.sleep = 15; // 10:30
-    else if (adjustedSleep <= 1365) scores.sleep = 10; // 10:45
-    else if (adjustedSleep <= 1380) scores.sleep = 5;  // 11:00
-    else if (adjustedSleep <= 1395) scores.sleep = 0;  // 11:15
+    // 1. Bed Time (Max 25) - Thresholds: 10:00, 10:15, 10:30, 10:45, 11:00, 11:15, 11:30
+    const sMin = t2m(data.sleepTime, true);
+    if (sMin <= 1320) scores.sleep = 25;
+    else if (sMin <= 1335) scores.sleep = 20;
+    else if (sMin <= 1350) scores.sleep = 15;
+    else if (sMin <= 1365) scores.sleep = 10;
+    else if (sMin <= 1380) scores.sleep = 5;
+    else if (sMin <= 1395) scores.sleep = 0;
     else scores.sleep = -5;
 
-    // Wakeup (Thresholds: 5:05, 5:10, 5:15, 5:20, 5:25, 5:30, 5:35)
+    // 2. Wake Up (Max 25) - Thresholds: 5:05, 5:10, 5:15, 5:20, 5:25, 5:30, 5:35
     const wMin = t2m(data.wakeupTime);
     if (wMin <= 305) scores.wakeup = 25;
     else if (wMin <= 310) scores.wakeup = 20;
@@ -42,7 +35,7 @@ const calculateDetailedScore = (data) => {
     else if (wMin <= 330) scores.wakeup = 0;
     else scores.wakeup = -5;
 
-    // Chanting (Thresholds: 9:00, 9:30, 11:00, 2:30, 5:00, 7:00, 9:00)
+    // 3. Chanting (Max 25) - Thresholds: 9:00, 9:30, 11:00, 2:30, 5:00, 7:00, 9:00
     const cMin = t2m(data.chantingTime);
     if (cMin <= 540) scores.chanting = 25;
     else if (cMin <= 570) scores.chanting = 20;
@@ -52,23 +45,33 @@ const calculateDetailedScore = (data) => {
     else if (cMin <= 1140) scores.chanting = 0;
     else scores.chanting = -5;
 
-    // Pathan & Shravan (Best of either, Max 25)
-    const maxStudyMins = Math.max(data.readingMinutes, data.hearingMinutes);
-    if (maxStudyMins >= 30) scores.study = 25;
-    else if (maxStudyMins >= 25) scores.study = 20;
-    else if (maxStudyMins >= 20) scores.study = 15;
-    else if (maxStudyMins >= 15) scores.study = 10;
-    else if (maxStudyMins >= 10) scores.study = 5;
-    else if (maxStudyMins >= 5) scores.study = 0;
-    else scores.study = -5;
+    // Helper for 25-mark Time-based Activities (Pathan, Shravan, Service)
+    const get25MarkTier = (mins) => {
+        if (mins >= 30) return 25;
+        if (mins >= 25) return 20;
+        if (mins >= 20) return 15;
+        if (mins >= 15) return 10;
+        if (mins >= 10) return 5;
+        if (mins >= 5) return 0;
+        return -5;
+    };
 
-    // Day Sleep (Max 10 Marks if <= 60 mins)
-    scores.daySleep = (data.daySleepMinutes <= 60) ? 10 : 0;
+    // 4. Pathan (Reading) - Max 25
+    scores.pathan = get25MarkTier(data.readingMinutes);
 
-    const total = scores.sleep + scores.wakeup + scores.chanting + scores.study + scores.daySleep;
+    // 5. Shravan (Hearing) - Max 25
+    scores.shravan = get25MarkTier(data.hearingMinutes);
+
+    // 6. Activity (Service for Coordinators OR Notes Revision for Senior Batch) - Max 15
+    const activityMins = (userProfile?.serviceLevel === "Senior Batch") ? data.notesRevision : data.serviceMinutes;
+    scores.activity = get25MarkTier(activityMins);
+
+    // 7. Day Sleep (Max 10) - Threshold: 60 Mints
+    scores.daySleep = (data.daySleepMinutes <= 60) ? 10 : -5;
+
+    const total = scores.sleep + scores.wakeup + scores.chanting + scores.pathan + scores.shravan + scores.activity + scores.daySleep;
     return { total, scores };
 };
-
 // --- 3. UI LOGIC ---
 function toggleSpecialFields() {
     const level = document.getElementById('profile-level').value;
