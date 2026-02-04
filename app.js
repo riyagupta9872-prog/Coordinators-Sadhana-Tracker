@@ -20,9 +20,9 @@ const t2m = (t) => {
     return h * 60 + m;
 };
 
-// Formats date to DD/MM/YYYY
-const formatDate = (dateStr) => {
-    const [y, m, d] = dateStr.split('-');
+// Proper Date Formatter (DD/MM/YYYY)
+const formatToDDMM = (iso) => {
+    const [y, m, d] = iso.split('-');
     return `${d}/${m}/${y}`;
 };
 
@@ -30,7 +30,7 @@ function getWeekInfo(dateStr) {
     const d = new Date(dateStr);
     const sun = new Date(d); sun.setDate(d.getDate() - d.getDay());
     const sat = new Date(sun); sat.setDate(sun.getDate() + 6);
-    const f = (dt) => dt.toLocaleDateString('en-GB'); // Gives DD/MM/YYYY
+    const f = (dt) => dt.toLocaleDateString('en-GB');
     return { label: f(sun) + " to " + f(sat) + "_" + sun.getFullYear() };
 }
 
@@ -66,7 +66,7 @@ function calculateFinalScore(data, userLevel) {
     return { total, percent: Math.round((total / 160) * 100) };
 }
 
-// --- 4. AUTH & NAVIGATION ---
+// --- 4. NAVIGATION & AUTH ---
 auth.onAuthStateChanged(async (user) => {
     if (user) {
         currentUser = user;
@@ -105,7 +105,7 @@ function setupDateSelect() {
     for (let i = 0; i < 2; i++) {
         const d = new Date(); d.setDate(d.getDate() - i);
         const iso = d.toISOString().split('T')[0];
-        sel.innerHTML += `<option value="${iso}">${formatDate(iso)}</option>`;
+        sel.innerHTML += `<option value="${iso}">${formatToDDMM(iso)}</option>`;
     }
 }
 
@@ -114,7 +114,7 @@ async function loadMyReports() {
     if (!container || !currentUser) return;
     const snap = await db.collection('users').doc(currentUser.uid).collection('sadhana').get();
     
-    if (snap.empty) { container.innerHTML = "<p class='card'>No data recorded.</p>"; return; }
+    if (snap.empty) { container.innerHTML = "<p class='card'>No reports yet.</p>"; return; }
 
     const groups = {};
     snap.forEach(doc => {
@@ -125,13 +125,13 @@ async function loadMyReports() {
 
     let html = "";
     Object.keys(groups).sort().reverse().forEach(w => {
-        html += `<details class="card" open style="margin-bottom:10px;">
-                    <summary style="cursor:pointer; font-weight:bold; padding:5px;">Week: ${w.split('_')[0]}</summary>
+        html += `<details class="card" open style="margin-bottom:15px;">
+                    <summary style="cursor:pointer; font-weight:bold; padding:10px;">Week: ${w.split('_')[0]}</summary>
                     <table style="width:100%; border-collapse:collapse; margin-top:10px;">
                         <tr style="border-bottom:1px solid #ddd; text-align:left;"><th>Date</th><th>Score</th><th>%</th></tr>`;
         groups[w].sort((a,b) => b.id.localeCompare(a.id)).forEach(e => {
             html += `<tr style="border-bottom:1px solid #eee">
-                        <td style="padding:8px;">${formatDate(e.id)}</td>
+                        <td style="padding:10px;">${formatToDDMM(e.id)}</td>
                         <td>${e.totalScore}</td>
                         <td style="font-weight:bold;">${e.dayPercent}%</td>
                      </tr>`;
@@ -146,7 +146,7 @@ async function loadAdminPanel() {
     const head = document.getElementById('admin-table-header');
     if (!body) return;
     head.innerHTML = "<th>Devotee</th><th>Level</th><th>Today %</th><th>Status</th>";
-    body.innerHTML = "<tr><td colspan='4'>Updating list...</td></tr>";
+    body.innerHTML = "<tr><td colspan='4'>Syncing database...</td></tr>";
 
     const users = await db.collection('users').get();
     const today = new Date().toISOString().split('T')[0];
@@ -155,7 +155,7 @@ async function loadAdminPanel() {
         const u = uDoc.data();
         const sDoc = await db.collection('users').doc(uDoc.id).collection('sadhana').doc(today).get();
         let score = sDoc.exists ? sDoc.data().dayPercent + "%" : "Pending";
-        rows += `<tr style="border-bottom:1px solid #eee">
+        rows += `<tr>
                     <td style="padding:10px;">${u.name}</td>
                     <td>${u.level}</td>
                     <td>${score}</td>
@@ -165,22 +165,30 @@ async function loadAdminPanel() {
     body.innerHTML = rows;
 }
 
-// --- 6. ACTIONS ---
-window.openProfileEdit = () => showSection('profile');
+// --- 6. ACTIONS (Matches your HTML exactly) ---
+window.openProfileEdit = () => {
+    if (userProfile) {
+        document.getElementById('profile-name').value = userProfile.name;
+        document.getElementById('profile-level').value = userProfile.level;
+        document.getElementById('cancel-edit').classList.remove('hidden');
+        showSection('profile');
+    }
+};
 
 window.downloadMasterReport = async () => {
     const users = await db.collection('users').get();
-    let rows = [["Name", "Level", "Date", "Score", "Percent"]];
+    let data = [["Name", "Level", "Date", "Score", "Percent"]];
     for (const uDoc of users.docs) {
         const u = uDoc.data();
         const sadhana = await db.collection('users').doc(uDoc.id).collection('sadhana').get();
-        sadhana.forEach(s => rows.push([u.name, u.level, formatDate(s.id), s.data().totalScore, s.data().dayPercent]));
+        sadhana.forEach(s => data.push([u.name, u.level, formatToDDMM(s.id), s.data().totalScore, s.data().dayPercent]));
     }
-    const ws = XLSX.utils.aoa_to_sheet(rows), wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Master");
-    XLSX.writeFile(wb, "Sadhana_Export.xlsx");
+    const ws = XLSX.utils.aoa_to_sheet(data), wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "SadhanaData");
+    XLSX.writeFile(wb, "Sadhana_Global_Report.xlsx");
 };
 
+// --- 7. FORM SUBMISSIONS ---
 document.getElementById('sadhana-form').onsubmit = async (e) => {
     e.preventDefault();
     const dateId = document.getElementById('sadhana-date').value;
@@ -197,7 +205,7 @@ document.getElementById('sadhana-form').onsubmit = async (e) => {
     };
     const res = calculateFinalScore(data, userProfile.level);
     await db.collection('users').doc(currentUser.uid).collection('sadhana').doc(dateId).set({...data, totalScore: res.total, dayPercent: res.percent});
-    alert("Sadhana Submitted!");
+    alert("Sadhana Saved!");
     switchTab('reports');
 };
 
