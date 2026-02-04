@@ -189,7 +189,7 @@ document.getElementById('sadhana-form').onsubmit = async (e) => {
         daySleepMinutes: parseInt(document.getElementById('daysleep-mins').value) || 0,
         timestamp: firebase.firestore.FieldValue.serverTimestamp()
     };
-    const { total, percent } = calculateScore(data, userProfile.level);
+    const { total, percent } = calculateFinalScore(data, userProfile.level);
     const dateId = document.getElementById('sadhana-date').value;
     await db.collection('users').doc(currentUser.uid).collection('sadhana').doc(dateId).set({
         ...data, totalScore: total, dayPercent: percent
