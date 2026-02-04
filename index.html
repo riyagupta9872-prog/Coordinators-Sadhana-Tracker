@@ -1,36 +1,151 @@
-<nav class="nav-tabs">
-    <button class="tab-btn active" data-tab="entry">Entry</button>
-    <button class="tab-btn" data-tab="reports">Reports</button>
-    <button class="tab-btn hidden" id="admin-tab-btn" data-tab="admin">Admin</button>
-</nav>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sadhana Tracker</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app">
+        <section id="auth-section" class="container">
+            <h1 style="text-align:center; color:var(--primary)">Sadhana Tracker</h1>
+            <form id="login-form" class="card">
+                <h2>Login</h2>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="login-email" required>
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" id="login-password" required>
+                </div>
+                <button type="submit">Login / Sign Up</button>
+            </form>
+        </section>
 
-<div id="entry-tab" class="tab-content">
-    <form id="sadhana-form" class="card">
-        <label>Chanting (Last round by):</label>
-        <input type="time" id="chanting-time" required>
+        <section id="profile-section" class="container hidden">
+            <form id="profile-form" class="card">
+                <h2>Complete Your Profile</h2>
+                <div class="form-group">
+                    <label>Full Name</label>
+                    <input type="text" id="profile-name" required>
+                </div>
+                <div class="form-group">
+                    <label>Select Level</label>
+                    <select id="profile-level" required>
+                        <option value="Senior Batch">Senior Batch</option>
+                        <option value="IGF Coordinator">IGF Coordinator</option>
+                        <option value="IYF Overall Coordinator">IYF Overall Coordinator</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Chanting Category</label>
+                    <select id="profile-chanting" required>
+                        <option value="Level 1 (1-4 Rounds)">Level 1 (1-4 Rounds)</option>
+                        <option value="Level 2 (5-8 Rounds)">Level 2 (5-8 Rounds)</option>
+                        <option value="Level 3 (9-15 Rounds)">Level 3 (9-15 Rounds)</option>
+                        <option value="Level 4 (16 Rounds)">Level 4 (16 Rounds)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Exact Rounds</label>
+                    <input type="number" id="profile-exact-rounds" placeholder="e.g. 16" required>
+                </div>
+                <button type="submit">Save & Continue</button>
+            </form>
+        </section>
 
-        <label>Reading (Pathan) - Mins:</label>
-        <input type="number" id="pathan-mins" value="0">
+        <section id="dashboard-section" class="hidden">
+            <header>
+                <div class="user-info">
+                    <span id="user-display-name">Loading...</span>
+                    <button id="logout-btn">Logout</button>
+                </div>
+                <button onclick="openProfileEdit()" style="width:auto; padding:5px 10px; background:var(--warning)">Edit Profile</button>
+            </header>
 
-        <label>Hearing (Shravan) - Mins:</label>
-        <input type="number" id="shravan-mins" value="0">
+            <nav class="tabs">
+                <button class="tab-btn active" onclick="switchTab('sadhana')">Entry</button>
+                <button class="tab-btn" onclick="switchTab('reports')">My History</button>
+                <button class="tab-btn hidden" id="admin-tab-btn" onclick="switchTab('admin')">Admin</button>
+            </nav>
 
-        <label id="service-label">Service (Seva) / Notes - Mins:</label>
-        <input type="number" id="service-mins" value="0">
-        
-        <hr>
-        <label>Bed Time:</label><input type="time" id="sleep-time" required>
-        <label>Wake Up:</label><input type="time" id="wakeup-time" required>
-        <label>Day Sleep (Mins):</label><input type="number" id="day-sleep" value="0">
+            <div id="sadhana-tab" class="tab-content active">
+                <form id="sadhana-form">
+                    <div class="form-group">
+                        <label>Date</label>
+                        <select id="sadhana-date" required></select>
+                    </div>
+                    <div class="form-group">
+                        <label>Bed Time (Yesterday)</label>
+                        <input type="time" id="sleep-time" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Wakeup Time</label>
+                        <input type="time" id="wakeup-time" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Chanting (Last Round By)</label>
+                        <input type="time" id="chanting-time" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Reading (Mins)</label>
+                        <input type="number" id="reading-mins" value="0" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Hearing (Mins)</label>
+                        <input type="number" id="hearing-mins" value="0" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Service (Mins)</label>
+                        <input type="number" id="service-mins" value="0" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Day Sleep (Mins)</label>
+                        <input type="number" id="daysleep-mins" value="0" required>
+                    </div>
+                    <div class="form-group hidden" id="notes-revision-group">
+                        <label>Notes Revision (Mins)</label>
+                        <input type="number" id="notes-mins" value="0">
+                    </div>
+                    <button type="submit" id="submit-btn" style="background:var(--success)">Submit Daily Sadhana</button>
+                </form>
+            </div>
 
-        <button type="submit" class="btn-success">Submit Audit</button>
-    </form>
-</div>
+            <div id="reports-tab" class="tab-content hidden">
+                <button onclick="downloadUserExcel(currentUser.uid, userProfile.name)" style="background:var(--success); margin-bottom:15px">Download My History (Excel)</button>       
+                <div id="weekly-reports-container"></div>
+            </div>
 
-<div id="reports-tab" class="tab-content hidden">
-    <div id="user-reports"></div>
-</div>
+            <div id="admin-tab" class="tab-content hidden">
+                <div style="display:flex; gap:10px; margin-bottom:15px">
+                    <button onclick="downloadMasterReport()" style="background:var(--success)">Download Master Comparative Excel</button>
+                </div>
+                <div class="card" style="overflow-x:auto">
+                    <h3>Performance (Last 4 Weeks)</h3>
+                    <div id="admin-comparative-reports-container"></div>
+                </div>
+                <div class="card">
+                    <h3>User Management</h3>
+                    <div id="admin-users-list"></div>
+                </div>
+            </div>
+        </section>
+    </div>
 
-<div id="admin-tab" class="tab-content hidden">
-    <div id="admin-panel"></div>
-</div>
+    <div id="user-report-modal" class="modal hidden">
+        <div class="modal-content">
+            <span onclick="closeUserModal()" class="close-modal">&times;</span>
+            <h2 id="modal-user-name"></h2>
+            <div id="modal-report-container"></div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
