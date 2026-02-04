@@ -90,7 +90,7 @@ function calculateFinalScore(data, userLevel) {
         return -5;
     };
 
-    const thresh = (level === "Senior Batch") ? 40 : 30;
+    const thresh = (userlevel === "Senior Batch") ? 40 : 30;
     sc.reading = getActScore(data.readingMinutes, thresh);
     sc.hearing = getActScore(data.hearingMinutes, thresh);
     sc.daySleep = (data.daySleepMinutes <= 60) ? 10 : -5;
@@ -98,7 +98,7 @@ function calculateFinalScore(data, userLevel) {
     let total = sc.sleep + sc.wakeup + sc.chanting + sc.reading + sc.hearing + sc.daySleep;
 
     // Level Specific Service & Notes
-    if (level === "Senior Batch") {
+    if (userlevel === "Senior Batch") {
         // Service (Max 10)
         const s = data.serviceMinutes;
         if (s >= 15) sc.service = 10; else if (s >= 10) sc.service = 5; else if (s >= 5) sc.service = 0; else sc.service = -5;
