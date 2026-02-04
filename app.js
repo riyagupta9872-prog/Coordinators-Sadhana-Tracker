@@ -1,4 +1,4 @@
-// --- 1. FIREBASE CONFIG ---
+// --- 1. FIREBASE SETUP ---
 const firebaseConfig = {
     apiKey: "AIzaSyDbRy8ZMJAWeTyZVnTphwRIei6jAckagjA",
     authDomain: "sadhana-tracker-b65ff.firebaseapp.com",
@@ -11,83 +11,110 @@ if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth(), db = firebase.firestore();
 let currentUser = null, userProfile = null;
 
-// --- 2. TIME & DATE HELPERS ---
+// --- 2. TIME HELPERS ---
 const t2m = (t) => {
-    if (!t || t === "NR") return 9999;
-    const [h, m] = t.split(':').map(Number);
-    let total = h * 60 + m;
-    // Normalize Sleep (10 PM to 3 AM next day logic)
-    if (h >= 0 && h <= 4) total += 1440; 
-    return total;
+    if (!t) return 9999;
+    let [h, m] = t.split(':').map(Number);
+    if (h >= 0 && h <= 4) h += 24; 
+    return h * 60 + m;
 };
 
 function getWeekInfo(dateStr) {
     const d = new Date(dateStr);
     const sun = new Date(d); sun.setDate(d.getDate() - d.getDay());
     const sat = new Date(sun); sat.setDate(sun.getDate() + 6);
-    const fmt = (date) => `${String(date.getDate()).padStart(2, '0')} ${date.toLocaleString('en-GB', { month: 'short' })}`;
-    return { 
-        sunStr: sun.toISOString().split('T')[0], 
-        label: `${fmt(sun)} to ${fmt(sat)}_${sun.getFullYear()}` 
+    const fmt = (date) => {
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = date.toLocaleString('en-GB', { month: 'short' });
+        return `${day} ${month}`;
     };
+    return { sunStr: sun.toISOString().split('T')[0], label: `${fmt(sun)} to ${fmt(sat)}_${sun.getFullYear()}` };
 }
 
+function getNRData(date) {
+    return {
+        id: date, totalScore: -30, dayPercent: -27,
+        sleepTime: "NR", wakeupTime: "NR", chantingTime: "NR",
+        readingMinutes: 0, hearingMinutes: 0, serviceMinutes: 0, daySleepMinutes: 0,
+        scores: { sleep: -5, wakeup: -5, chanting: -5, reading: -5, hearing: -5, service: -5, daySleep: 0 }
+    };
+
 // --- 3. SCORING ENGINE ---
-function calculateDayScore(data, level) {
-    const sc = { sleep: 0, wakeup: 0, chanting: 0, reading: 0, hearing: 0, service: 0, daySleep: 0, notes: 0 };
-    
-    // A. TIME BASED SCORING (Sleep, Wake, Chanting)
-    const scoreTime = (time, targets, marks) => {
-        const m = t2m(time);
-        for(let i=0; i<targets.length; i++) {
-            if (m <= t2m(targets[i])) return marks[i];
-        }
+
+function calculateFinalScore(data, userLevel) {
+    // 1. Convert Time to Minutes (t2m helper)
+    const slpM = t2m(data.sleepTime, true);
+    const wakM = t2m(data.wakeupTime, false);
+    const chnM = t2m(data.chantingTime, false);
+
+    // 2. Initialize scores with default penalty (-5)
+    const sc = { sleep: -5, wakeup: -5, chanting: -5, reading: -5, hearing: -5, service: -5, notes: -5, daySleep: 0 };
+
+    // --- TIME BASED SCORING ---
+    // Sleep (Target 10:30 PM / 1350 mins)
+    if (slpM <= 1350) sc.sleep = 25; 
+    else if (slpM <= 1355) sc.sleep = 20; 
+    else if (slpM <= 1360) sc.sleep = 15; 
+    else if (slpM <= 1365) sc.sleep = 10; 
+    else if (slpM <= 1370) sc.sleep = 5; 
+    else if (slpM <= 1375) sc.sleep = 0;
+    else if (slpM > 1375) sc.sleep = -5;
+
+    // Wakeup (Target 5.05 AM / 305 mins)
+        if (wakM <= 305) sc.wakeup = 25; 
+    else if (wakM <= 310) sc.wakeup = 20; 
+    else if (wakM <= 315) sc.wakeup = 15; 
+    else if (wakM <= 320) sc.wakeup = 10; 
+    else if (wakM <= 325) sc.wakeup = 5; 
+    else if (wakM <= 330) sc.wakeup = 0;
+    else if (wakM > 330) sc.wakeup = -5;
+
+    // Chanting (Fixed slots)
+    if (chnM <= 540) sc.chanting = 25; 
+    else if (chnM <= 570) sc.chanting = 20; 
+    else if (chnM <= 660) sc.chanting = 15; 
+    else if (chnM <= 870) sc.chanting = 10; 
+    else if (chnM <= 1020) sc.chanting = 5; 
+    else if (chnM <= 1140) sc.chanting = 0;
+    else if (chnM > 1140) sc.chanting = -5;
+
+    // Reading & Hearing Patterns
+    const getActScore = (m, threshold) => {
+        if (m >= threshold) return 25;
+        if (m >= threshold - 10) return 20;
+        if (m >= 20) return 15;
+        if (m >= 15) return 10;
+        if (m >= 10) return 5;
+        if (m >= 5) return 0;
         return -5;
     };
 
-    const t_sleep = ["22:30", "22:35", "22:40", "22:45", "22:50", "22:55", "23:00"];
-    const t_wake = ["05:05", "05:10", "05:15", "05:20", "05:25", "05:30", "05:35"];
-    const t_chant = ["09:00", "09:30", "11:00", "14:30", "17:00", "19:00", "21:00"];
-    const marks = [25, 20, 15, 10, 5, 0, -5];
+    const thresh = (level === "Senior Batch") ? 40 : 30;
+    sc.reading = getActScore(data.readingMinutes, thresh);
+    sc.hearing = getActScore(data.hearingMinutes, thresh);
+    sc.daySleep = (data.daySleepMinutes <= 60) ? 10 : -5;
 
-    sc.sleep = scoreTime(data.sleepTime, t_sleep, marks);
-    sc.wakeup = scoreTime(data.wakeupTime, t_wake, marks);
-    sc.chanting = scoreTime(data.chantingTime, t_chant, marks);
+    let total = sc.sleep + sc.wakeup + sc.chanting + sc.reading + sc.hearing + sc.daySleep;
 
-    // B. MINUTE BASED SCORING
-    const getMinScore = (mins, isIYF = false) => {
-        const step = 5;
-        const threshold = isIYF ? 40 : 30; // IYF needs 40m for max marks
-        if (mins >= threshold) return 25;
-        if (mins <= 0) return -5;
-        // Logic: 25 for max, reducing by 5 for every 5 mins less
-        let score = 25 - (Math.ceil((threshold - mins) / step) * 5);
-        return Math.max(-5, score);
-    };
-
-    const isIYF = level === "IYF Overall Coordinator";
-    sc.reading = getMinScore(data.readingMinutes, isIYF);
-    sc.hearing = getMinScore(data.hearingMinutes, isIYF);
-    sc.service = getMinScore(data.serviceMinutes, false); // Service usually 30m threshold
-    sc.notes = getMinScore(data.notesMinutes || 0, false);
-    sc.daySleep = data.daySleepMinutes > 60 ? 0 : 10;
-
-    // C. TOTAL CALCULATION BASED ON LEVEL
-    let total = sc.sleep + sc.wakeup + sc.chanting + sc.daySleep;
-    let maxM = 160;
-
+    // Level Specific Service & Notes
     if (level === "Senior Batch") {
-        total += Math.max(sc.reading, sc.hearing, sc.notes);
-        maxM = 110;
+        // Service (Max 10)
+        const s = data.serviceMinutes;
+        if (s >= 15) sc.service = 10; else if (s >= 10) sc.service = 5; else if (s >= 5) sc.service = 0; else sc.service = -5;
+        // Notes (Max 15)
+        const n = data.notesMinutes;
+        if (n >= 20) sc.notes = 15; else if (n >= 15) sc.notes = 10; else if (n >= 10) sc.notes = 5; else if (n >= 5) sc.notes = 0; else sc.notes = -5;
+        total += (sc.service + sc.notes);
     } else {
-        total += (sc.reading + sc.hearing + sc.service);
-        maxM = 160;
+        // Coordinator Service (Max 25)
+        sc.service = getActScore(data.serviceMinutes, 30);
+        total += sc.service;
     }
 
-    return { total, scores: sc, percent: Math.round((total/maxM)*100) };
+    return { total, percent: Math.round((total / 160) * 100) };
 }
-
-// --- 4. UI LOGIC ---
+    
+// --- 4. AUTH & PROFILE ---
 auth.onAuthStateChanged(async (user) => {
     if (user) {
         currentUser = user;
@@ -95,23 +122,62 @@ auth.onAuthStateChanged(async (user) => {
         if (doc.exists) {
             userProfile = doc.data();
             document.getElementById('user-display-name').textContent = `${userProfile.name} | ${userProfile.level}`;
+            document.getElementById('notes-revision-field').classList.toggle('hidden', userProfile.level !== "Senior Batch");
             if (userProfile.role === 'admin') document.getElementById('admin-tab-btn').classList.remove('hidden');
-            
-            // Show Notes Revision only for Senior Batch
-            document.getElementById('notes-revision-group').classList.toggle('hidden', userProfile.level !== "Senior Batch");
-            
             showSection('dashboard');
             setupDateSelect();
-            switchTab('sadhana');
+            loadMyReports(); // Load history on login
         } else showSection('profile');
     } else showSection('auth');
 });
 
+// --- 5. REPORT LOADING (Fixes "Missing" Reports) ---
+async function loadMyReports() {
+    const container = document.getElementById('weekly-reports-container');
+    const snap = await db.collection('users').doc(currentUser.uid).collection('sadhana').orderBy('timestamp', 'desc').limit(7).get();
+    
+    if (snap.empty) { container.innerHTML = "<p>No entries yet.</p>"; return; }
+    
+    let html = `<h3>Recent Activity</h3><table style="width:100%"><tr><th>Date</th><th>Score</th><th>%</th></tr>`;
+    snap.forEach(doc => {
+        const d = doc.data();
+        html += `<tr><td>${doc.id}</td><td>${d.totalScore}</td><td>${d.dayPercent}%</td></tr>`;
+    });
+    container.innerHTML = html + "</table>";
+}
+
+// Admin Loader (Simplified View)
+async function loadAdminPanel() {
+    const tableBody = document.getElementById('admin-table-body');
+    const tableHeader = document.getElementById('admin-table-header');
+    tableHeader.innerHTML = "<th>Name</th><th>Level</th><th>Today %</th>";
+    tableBody.innerHTML = "Loading...";
+
+    const usersSnap = await db.collection('users').get();
+    let bodyHtml = "";
+    const today = new Date().toISOString().split('T')[0];
+
+    for (const uDoc of usersSnap.docs) {
+        const u = uDoc.data();
+        const sDoc = await uDoc.ref.collection('sadhana').doc(today).get();
+        const score = sDoc.exists ? sDoc.data().dayPercent + "%" : "No Entry";
+        bodyHtml += `<tr><td>${u.name}</td><td>${u.level}</td><td>${score}</td></tr>`;
+    }
+    tableBody.innerHTML = bodyHtml;
+}
+
+// --- 6. CORE ACTIONS ---
+window.switchTab = (t) => {
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById(t + '-tab').classList.remove('hidden');
+    event.currentTarget.classList.add('active');
+    if (t === 'admin') loadAdminPanel();
+    if (t === 'reports') loadMyReports();
+};
+
 document.getElementById('sadhana-form').onsubmit = async (e) => {
     e.preventDefault();
-    const btn = document.getElementById('submit-btn');
-    btn.disabled = true;
-
     const data = {
         sleepTime: document.getElementById('sleep-time').value,
         wakeupTime: document.getElementById('wakeup-time').value,
@@ -119,28 +185,18 @@ document.getElementById('sadhana-form').onsubmit = async (e) => {
         readingMinutes: parseInt(document.getElementById('reading-mins').value) || 0,
         hearingMinutes: parseInt(document.getElementById('hearing-mins').value) || 0,
         serviceMinutes: parseInt(document.getElementById('service-mins').value) || 0,
-        daySleepMinutes: parseInt(document.getElementById('daysleep-mins').value) || 0,
         notesMinutes: parseInt(document.getElementById('notes-mins').value) || 0,
-        submittedAt: firebase.firestore.FieldValue.serverTimestamp()
+        daySleepMinutes: parseInt(document.getElementById('daysleep-mins').value) || 0,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
     };
-
-    const result = calculateDayScore(data, userProfile.level);
+    const { total, percent } = calculateScore(data, userProfile.level);
     const dateId = document.getElementById('sadhana-date').value;
-
-    try {
-        await db.collection('users').doc(currentUser.uid).collection('sadhana').doc(dateId).set({
-            ...data,
-            totalScore: result.total,
-            dayPercent: result.percent,
-            scores: result.scores
-        });
-        alert("Sadhana Submitted Successfully!");
-        switchTab('reports');
-    } catch (err) { alert("Error: " + err.message); }
-    btn.disabled = false;
+    await db.collection('users').doc(currentUser.uid).collection('sadhana').doc(dateId).set({
+        ...data, totalScore: total, dayPercent: percent
+    });
+    alert("Success!"); loadMyReports();
 };
 
-// Profile Setup
 document.getElementById('profile-form').onsubmit = async (e) => {
     e.preventDefault();
     const data = {
@@ -154,80 +210,23 @@ document.getElementById('profile-form').onsubmit = async (e) => {
     location.reload();
 };
 
-function setupDateSelect() {
-    const select = document.getElementById('sadhana-date');
-    select.innerHTML = '';
-    for(let i=0; i<2; i++) {
-        const d = new Date(); d.setDate(d.getDate() - i);
-        const ds = d.toISOString().split('T')[0];
-        const opt = document.createElement('option');
-        opt.value = ds; opt.textContent = ds;
-        select.appendChild(opt);
-    }
-}
-
-// Admin & Excel Logic (Standardised)
-window.downloadMasterReport = async () => {
-    const weeks = [];
-    for (let i = 0; i < 4; i++) {
-        const d = new Date(); d.setDate(d.getDate() - (i*7));
-        weeks.push(getWeekInfo(d.toISOString().split('T')[0]));
-    }
-    weeks.reverse();
-    
-    const usersSnap = await db.collection('users').get();
-    const rows = [["Name", "Level", "Category", ...weeks.map(w => w.label + " (%)")]];
-
-    for (const uDoc of usersSnap.docs) {
-        const u = uDoc.data();
-        const sSnap = await uDoc.ref.collection('sadhana').get();
-        const sEntries = sSnap.docs.map(d => ({ date: d.id, score: d.data().totalScore || 0 }));
-        const userRow = [u.name, u.level, u.chantingCategory];
-        
-        const maxDaily = u.level === "Senior Batch" ? 110 : 160;
-
-        weeks.forEach(w => {
-            let weekTotal = 0; let curr = new Date(w.sunStr);
-            for (let i = 0; i < 7; i++) {
-                const ds = curr.toISOString().split('T')[0];
-                const entry = sEntries.find(e => e.date === ds);
-                weekTotal += entry ? entry.score : -30; // -5 for each of 6 activities if missed
-                curr.setDate(curr.getDate() + 1);
-            }
-            userRow.push(Math.round((weekTotal / (maxDaily * 7)) * 100) + "%");
-        });
-        rows.push(userRow);
-    }
-    const ws = XLSX.utils.aoa_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Master_Report");
-    XLSX.writeFile(wb, "Sadhana_Master_Audit.xlsx");
-};
-
-// --- AUTH UI ---
-document.getElementById('login-form').onsubmit = (e) => {
-    e.preventDefault();
-    const email = document.getElementById('login-email').value;
-    const pass = document.getElementById('login-password').value;
-    auth.signInWithEmailAndPassword(email, pass).catch(async (err) => {
-        if(err.code === 'auth/user-not-found') return auth.createUserWithEmailAndPassword(email, pass);
-        alert(err.message);
-    });
-};
-document.getElementById('logout-btn').onclick = () => auth.signOut();
 function showSection(id) {
     document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
     document.getElementById(id + '-section').classList.remove('hidden');
 }
-window.switchTab = (t) => {
-    document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.getElementById(t + '-tab').classList.remove('hidden');
-    const btn = document.querySelector(`button[onclick*="switchTab('${t}')"]`);
-    if (btn) btn.classList.add('active');
-};
+
 window.openProfileEdit = () => {
     document.getElementById('profile-name').value = userProfile.name;
-    document.getElementById('profile-level').value = userProfile.level;
+    document.getElementById('cancel-edit').classList.remove('hidden');
     showSection('profile');
 };
+
+document.getElementById('login-form').onsubmit = (e) => {
+    e.preventDefault();
+    auth.signInWithEmailAndPassword(document.getElementById('login-email').value, document.getElementById('login-password').value)
+        .catch(err => {
+            if(err.code === 'auth/user-not-found') auth.createUserWithEmailAndPassword(document.getElementById('login-email').value, document.getElementById('login-password').value);
+            else alert(err.message);
+        });
+};
+document.getElementById('logout-btn').onclick = () => auth.signOut();
