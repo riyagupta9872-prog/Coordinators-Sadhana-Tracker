@@ -31,69 +31,69 @@ function getWeekInfo(dateStr) {
     return { sunStr: sun.toISOString().split('T')[0], label: `${fmt(sun)} to ${fmt(sat)}_${sun.getFullYear()}` };
 }
 
-// --- 3. SCORING ENGINE (Directly from your Doc) ---
+// --- 3. SCORING ENGINE (Aapka Final Logic) ---
 function calculateFinalScore(data, userLevel) {
-    const slpM = t2m(data.sleepTime); [cite: 4]
-    const wakM = t2m(data.wakeupTime); [cite: 5]
-    const chnM = t2m(data.chantingTime); [cite: 6]
+    [cite_start]const slpM = t2m(data.sleepTime); [cite: 4]
+    [cite_start]const wakM = t2m(data.wakeupTime); [cite: 5]
+    [cite_start]const chnM = t2m(data.chantingTime); [cite: 6]
 
-    const sc = { sleep: -5, wakeup: -5, chanting: -5, reading: -5, hearing: -5, service: -5, notes: -5, daySleep: 0 }; [cite: 8]
+    [cite_start]const sc = { sleep: -5, wakeup: -5, chanting: -5, reading: -5, hearing: -5, service: -5, notes: -5, daySleep: 0 }; [cite: 8]
 
-    // Sleep (10:30 PM Target)
-    if (slpM <= 1350) sc.sleep = 25; [cite: 11]
-    else if (slpM <= 1355) sc.sleep = 20; [cite: 12]
-    else if (slpM <= 1360) sc.sleep = 15; [cite: 13]
-    else if (slpM <= 1365) sc.sleep = 10; [cite: 14]
-    else if (slpM <= 1370) sc.sleep = 5; [cite: 15]
-    else if (slpM <= 1375) sc.sleep = 0; [cite: 16]
-    else sc.sleep = -5; [cite: 17]
+    // Sleep (10:30 PM)
+    [cite_start]if (slpM <= 1350) sc.sleep = 25; [cite: 11]
+    [cite_start]else if (slpM <= 1355) sc.sleep = 20; [cite: 12]
+    [cite_start]else if (slpM <= 1360) sc.sleep = 15; [cite: 13]
+    [cite_start]else if (slpM <= 1365) sc.sleep = 10; [cite: 14]
+    [cite_start]else if (slpM <= 1370) sc.sleep = 5; [cite: 15]
+    [cite_start]else if (slpM <= 1375) sc.sleep = 0; [cite: 16]
+    [cite_start]else sc.sleep = -5; [cite: 17]
 
-    // Wakeup (5:05 AM Target)
-    if (wakM <= 305) sc.wakeup = 25; [cite: 19]
-    else if (wakM <= 310) sc.wakeup = 20; [cite: 20]
-    else if (wakM <= 315) sc.wakeup = 15; [cite: 21]
-    else if (wakM <= 320) sc.wakeup = 10; [cite: 22]
-    else if (wakM <= 325) sc.wakeup = 5; [cite: 23]
-    else if (wakM <= 330) sc.wakeup = 0; [cite: 24]
-    else sc.wakeup = -5; [cite: 25]
+    // Wakeup (5:05 AM)
+    [cite_start]if (wakM <= 305) sc.wakeup = 25; [cite: 19]
+    [cite_start]else if (wakM <= 310) sc.wakeup = 20; [cite: 20]
+    [cite_start]else if (wakM <= 315) sc.wakeup = 15; [cite: 21]
+    [cite_start]else if (wakM <= 320) sc.wakeup = 10; [cite: 22]
+    [cite_start]else if (wakM <= 325) sc.wakeup = 5; [cite: 23]
+    [cite_start]else if (wakM <= 330) sc.wakeup = 0; [cite: 24]
+    [cite_start]else sc.wakeup = -5; [cite: 25]
 
     // Chanting
-    if (chnM <= 540) sc.chanting = 25; [cite: 27]
-    else if (chnM <= 570) sc.chanting = 20; [cite: 28]
-    else if (chnM <= 660) sc.chanting = 15; [cite: 29]
-    else if (chnM <= 870) sc.chanting = 10; [cite: 30]
-    else if (chnM <= 1020) sc.chanting = 5; [cite: 31]
-    else if (chnM <= 1140) sc.chanting = 0; [cite: 32]
-    else sc.chanting = -5; [cite: 33]
+    [cite_start]if (chnM <= 540) sc.chanting = 25; [cite: 27]
+    [cite_start]else if (chnM <= 570) sc.chanting = 20; [cite: 28]
+    [cite_start]else if (chnM <= 660) sc.chanting = 15; [cite: 29]
+    [cite_start]else if (chnM <= 870) sc.chanting = 10; [cite: 30]
+    [cite_start]else if (chnM <= 1020) sc.chanting = 5; [cite: 31]
+    [cite_start]else if (chnM <= 1140) sc.chanting = 0; [cite: 32]
+    [cite_start]else sc.chanting = -5; [cite: 33]
 
     const getActScore = (m, threshold) => {
-        if (m >= threshold) return 25; [cite: 36]
-        if (m >= threshold - 10) return 20; [cite: 37]
-        if (m >= 20) return 15; [cite: 38]
-        if (m >= 15) return 10; [cite: 39]
-        if (m >= 10) return 5; [cite: 40]
-        if (m >= 5) return 0; [cite: 41]
-        return -5; [cite: 42]
+        [cite_start]if (m >= threshold) return 25; [cite: 36]
+        [cite_start]if (m >= threshold - 10) return 20; [cite: 37]
+        [cite_start]if (m >= 20) return 15; [cite: 38]
+        [cite_start]if (m >= 15) return 10; [cite: 39]
+        [cite_start]if (m >= 10) return 5; [cite: 40]
+        [cite_start]if (m >= 5) return 0; [cite: 41]
+        [cite_start]return -5; [cite: 42]
     };
 
-    const thresh = (userLevel === "Senior Batch") ? 40 : 30; [cite: 44]
-    sc.reading = getActScore(data.readingMinutes, thresh); [cite: 45]
-    sc.hearing = getActScore(data.hearingMinutes, thresh); [cite: 46]
-    sc.daySleep = (data.daySleepMinutes <= 60) ? 10 : -5; [cite: 47]
+    const thresh = (userLevel === "Senior Batch") ? [cite_start]40 : 30; [cite: 44]
+    [cite_start]sc.reading = getActScore(data.readingMinutes, thresh); [cite: 45]
+    [cite_start]sc.hearing = getActScore(data.hearingMinutes, thresh); [cite: 46]
+    sc.daySleep = (data.daySleepMinutes <= 60) ? [cite_start]10 : -5; [cite: 47]
 
-    let total = sc.sleep + sc.wakeup + sc.chanting + sc.reading + sc.hearing + sc.daySleep; [cite: 48]
+    [cite_start]let total = sc.sleep + sc.wakeup + sc.chanting + sc.reading + sc.hearing + sc.daySleep; [cite: 48]
 
-    if (userLevel === "Senior Batch") { [cite: 50]
-        const s = data.serviceMinutes; [cite: 52]
-        if (s >= 15) sc.service = 10; else if (s >= 10) sc.service = 5; else if (s >= 5) sc.service = 0; else sc.service = -5; [cite: 53-54]
-        const n = data.notesMinutes; [cite: 56]
-        if (n >= 20) sc.notes = 15; else if (n >= 15) sc.notes = 10; else if (n >= 10) sc.notes = 5; else if (n >= 5) sc.notes = 0; else sc.notes = -5; [cite: 57-58]
-        total += (sc.service + sc.notes); [cite: 59]
+    [cite_start]if (userLevel === "Senior Batch") { [cite: 50]
+        [cite_start]const s = data.serviceMinutes; [cite: 52]
+        [cite_start]if (s >= 15) sc.service = 10; else if (s >= 10) sc.service = 5; else if (s >= 5) sc.service = 0; else sc.service = -5; [cite: 53, 54]
+        [cite_start]const n = data.notesMinutes; [cite: 56]
+        [cite_start]if (n >= 20) sc.notes = 15; else if (n >= 15) sc.notes = 10; else if (n >= 10) sc.notes = 5; else if (n >= 5) sc.notes = 0; else sc.notes = -5; [cite: 57, 58]
+        [cite_start]total += (sc.service + sc.notes); [cite: 59]
     } else {
-        sc.service = getActScore(data.serviceMinutes, 30); [cite: 62]
-        total += sc.service; [cite: 63]
+        [cite_start]sc.service = getActScore(data.serviceMinutes, 30); [cite: 62]
+        [cite_start]total += sc.service; [cite: 63]
     }
-    return { total, percent: Math.round((total / 160) * 100) }; [cite: 65]
+    [cite_start]return { total, percent: Math.round((total / 160) * 100) }; [cite: 65]
 }
 
 // --- 4. AUTH & PROFILE ---
@@ -104,8 +104,12 @@ auth.onAuthStateChanged(async (user) => {
         if (doc.exists) {
             userProfile = doc.data();
             document.getElementById('user-display-name').textContent = `${userProfile.name} | ${userProfile.level}`;
-            document.getElementById('notes-revision-field').classList.toggle('hidden', userProfile.level !== "Senior Batch");
-            if (userProfile.role === 'admin') document.getElementById('admin-tab-btn').classList.remove('hidden');
+            const notesField = document.getElementById('notes-revision-field');
+            if(notesField) notesField.classList.toggle('hidden', userProfile.level !== "Senior Batch");
+            if (userProfile.role === 'admin') {
+                const adminBtn = document.getElementById('admin-tab-btn');
+                if(adminBtn) adminBtn.classList.remove('hidden');
+            }
             showSection('dashboard');
             setupDateSelect();
             loadMyReports();
@@ -117,14 +121,14 @@ auth.onAuthStateChanged(async (user) => {
     }
 });
 
-// --- 5. REPORT FETCHING (Collapsible) ---
+// --- 5. DATA FETCHING ---
 async function loadMyReports() {
     const container = document.getElementById('weekly-reports-container');
-    if (!container) return;
+    if (!container || !currentUser) return;
     const snap = await db.collection('users').doc(currentUser.uid).collection('sadhana').get();
     
     if (snap.empty) {
-        container.innerHTML = "<p>No entries found yet.</p>";
+        container.innerHTML = "<div class='card'><p>No entries yet.</p></div>";
         return;
     }
 
@@ -139,13 +143,15 @@ async function loadMyReports() {
     let html = "";
     Object.keys(weeklyGroups).sort().reverse().forEach(week => {
         html += `
-        <details class="card" style="margin-bottom:10px;">
-            <summary style="font-weight:bold; cursor:pointer;">Week: ${week.split('_')[0]}</summary>
-            <table style="width:100%; border-collapse:collapse; margin-top:10px;">
-                <tr><th>Date</th><th>Score</th><th>%</th></tr>
+        <details class="card" style="margin-bottom:10px; cursor:pointer;">
+            <summary style="font-weight:bold; padding:5px;">Week: ${week.split('_')[0]}</summary>
+            <table style="width:100%; margin-top:10px; border-collapse:collapse;">
+                <tr style="border-bottom:1px solid #eee; text-align:left;">
+                    <th>Date</th><th>Score</th><th>%</th>
+                </tr>
                 ${weeklyGroups[week].sort((a,b) => b.id.localeCompare(a.id)).map(e => `
-                <tr>
-                    <td>${e.id}</td><td>${e.totalScore}</td><td>${e.dayPercent}%</td>
+                <tr style="border-bottom:1px solid #f9f9f9;">
+                    <td style="padding:8px;">${e.id}</td><td>${e.totalScore}</td><td><strong>${e.dayPercent}%</strong></td>
                 </tr>`).join('')}
             </table>
         </details>`;
@@ -153,13 +159,32 @@ async function loadMyReports() {
     container.innerHTML = html;
 }
 
+async function loadAdminPanel() {
+    const tableBody = document.getElementById('admin-table-body');
+    if (!tableBody) return;
+    tableBody.innerHTML = "<tr><td colspan='3'>Loading...</td></tr>";
+
+    const usersSnap = await db.collection('users').get();
+    const today = new Date().toISOString().split('T')[0];
+    let bodyHtml = "";
+    for (const uDoc of usersSnap.docs) {
+        const u = uDoc.data();
+        const sDoc = await db.collection('users').doc(uDoc.id).collection('sadhana').doc(today).get();
+        let score = sDoc.exists ? `<strong>${sDoc.data().dayPercent}%</strong>` : "Pending";
+        bodyHtml += `<tr style="border-bottom:1px solid #eee;"><td style="padding:10px;">${u.name}</td><td>${u.level}</td><td>${score}</td></tr>`;
+    }
+    tableBody.innerHTML = bodyHtml;
+}
+
 // --- 6. CORE ACTIONS ---
 window.switchTab = (t) => {
     document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.getElementById(t + '-tab').classList.remove('hidden');
-    event.currentTarget.classList.add('active');
+    const targetTab = document.getElementById(t + '-tab');
+    if(targetTab) targetTab.classList.remove('hidden');
+    if(event && event.currentTarget) event.currentTarget.classList.add('active');
     if (t === 'admin') loadAdminPanel();
+    if (t === 'reports') loadMyReports();
 };
 
 document.getElementById('sadhana-form').onsubmit = async (e) => {
@@ -178,7 +203,7 @@ document.getElementById('sadhana-form').onsubmit = async (e) => {
     const { total, percent } = calculateFinalScore(data, userProfile.level);
     const dateId = document.getElementById('sadhana-date').value;
     await db.collection('users').doc(currentUser.uid).collection('sadhana').doc(dateId).set({ ...data, totalScore: total, dayPercent: percent });
-    alert("Success!");
+    alert("Submitted!");
     loadMyReports();
 };
 
@@ -195,7 +220,8 @@ document.getElementById('profile-form').onsubmit = async (e) => {
 
 function showSection(id) {
     document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
-    document.getElementById(id + '-section').classList.remove('hidden');
+    const sec = document.getElementById(id + '-section');
+    if(sec) sec.classList.remove('hidden');
 }
 
 function setupDateSelect() {
