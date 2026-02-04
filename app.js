@@ -12,7 +12,7 @@ if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth(), db = firebase.firestore();
 let currentUser = null, userProfile = null;
 
-// --- 2. FORMATTERS & HELPERS ---
+// --- 2. HELPERS ---
 const t2m = (t) => {
     if (!t) return 9999;
     let [h, m] = t.split(':').map(Number);
@@ -25,14 +25,7 @@ const formatToDDMM = (iso) => {
     return `${d}/${m}/${y}`;
 };
 
-function getWeekInfo(dateStr) {
-    const d = new Date(dateStr);
-    const sun = new Date(d); sun.setDate(d.getDate() - d.getDay());
-    const sat = new Date(sun); sat.setDate(sun.getDate() + 6);
-    return { label: sun.toLocaleDateString('en-GB') + " to " + sat.toLocaleDateString('en-GB') + "_" + sun.getFullYear() };
-}
-
-// --- 3. SCORING ENGINE (160 Points) ---
+// --- 3. SCORING ENGINE (Position Based) ---
 function calculateFinalScore(data, userLevel) {
     const slpM = t2m(data.sleepTime), wakM = t2m(data.wakeupTime), chnM = t2m(data.chantingTime);
     const sc = { sleep: -5, wakeup: -5, chanting: -5, reading: -5, hearing: -5, service: -5, notes: -5, daySleep: 0 };
@@ -41,19 +34,18 @@ function calculateFinalScore(data, userLevel) {
     if (wakM <= 305) sc.wakeup = 25; else if (wakM <= 310) sc.wakeup = 20; else if (wakM <= 315) sc.wakeup = 15; else if (wakM <= 320) sc.wakeup = 10; else if (wakM <= 325) sc.wakeup = 5; else if (wakM <= 330) sc.wakeup = 0;
     if (chnM <= 540) sc.chanting = 25; else if (chnM <= 570) sc.chanting = 20; else if (chnM <= 660) sc.chanting = 15; else if (chnM <= 870) sc.chanting = 10; else if (chnM <= 1020) sc.chanting = 5; else if (chnM <= 1140) sc.chanting = 0;
 
-    const getActScore = (m, threshold) => {
-        if (m >= threshold) return 25; if (m >= threshold - 10) return 20; if (m >= 20) return 15; if (m >= 15) return 10; if (m >= 10) return 5; if (m >= 5) return 0; return -5;
-    };
-
-    const thresh = (userLevel === "Senior Batch") ? 40 : 30;
-    sc.reading = getActScore(data.readingMinutes, thresh);
-    sc.hearing = getActScore(data.hearingMinutes, thresh);
+    const getActScore = (m, thresh) => (m >= thresh ? 25 : m >= 25? 20 : m >= 20 ? 15 : m >= 15 ? 10 : m >= 10 ? 5 : m >= 5 ? 0 : -5);
+    const baseT = (userLevel === "Senior Batch") ? 40 : 30;
+    
+    sc.reading = getActScore(data.readingMinutes, baseT);
+    sc.hearing = getActScore(data.hearingMinutes, baseT);
     sc.daySleep = (data.daySleepMinutes <= 60) ? 10 : -5;
+
     let total = sc.sleep + sc.wakeup + sc.chanting + sc.reading + sc.hearing + sc.daySleep;
 
     if (userLevel === "Senior Batch") {
-        if (data.serviceMinutes >= 15) sc.service = 10; else if (data.serviceMinutes >= 10) sc.service = 5; else if (data.serviceMinutes >= 5) sc.service = 0; else sc.service = -5;
-        if (data.notesMinutes >= 20) sc.notes = 15; else if (data.notesMinutes >= 15) sc.notes = 10; else if (data.notesMinutes >= 10) sc.notes = 5; else if (data.notesMinutes >= 5) sc.notes = 0; else sc.notes = -5;
+        sc.service = (data.serviceMinutes >= 15 ? 10 : data.serviceMinutes >= 10 ? 5 : -5);
+        sc.notes = (data.notesMinutes >= 20 ? 15 : data.notesMinutes >= 10 ? 5 : -5);
         total += (sc.service + sc.notes);
     } else {
         sc.service = getActScore(data.serviceMinutes, 30);
@@ -79,14 +71,22 @@ auth.onAuthStateChanged(async (user) => {
     } else { showSection('auth'); }
 });
 
-window.switchTab = (t) => {
+window.switchTab = (tabName) => {
+    // Hide all tab contents
     document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-    document.getElementById(t + '-tab').classList.remove('hidden');
-    const btn = document.querySelector(`button[onclick*="${t}"]`);
-    if (btn) btn.classList.add('active');
-    if (t === 'reports') loadMyReports();
-    if (t === 'admin') loadAdminPanel();
+    
+    // Show selected tab
+    const activeTab = document.getElementById(tabName + '-tab');
+    if (activeTab) activeTab.classList.remove('hidden');
+    
+    // Highlight button
+    const activeBtn = document.querySelector(`button[onclick*="${tabName}"]`);
+    if (activeBtn) activeBtn.classList.add('active');
+
+    // Trigger data load
+    if (tabName === 'reports') loadMyReports();
+    if (tabName === 'admin') loadAdminPanel();
 };
 
 function showSection(id) {
@@ -94,68 +94,67 @@ function showSection(id) {
     document.getElementById(id + '-section').classList.remove('hidden');
 }
 
-// --- 5. DATA FETCHING ---
-function setupDateSelect() {
-    const sel = document.getElementById('sadhana-date');
-    if (!sel) return;
-    sel.innerHTML = "";
-    for (let i = 0; i < 2; i++) {
-        const d = new Date(); d.setDate(d.getDate() - i);
-        const iso = d.toISOString().split('T')[0];
-        sel.innerHTML += `<option value="${iso}">${formatToDDMM(iso)}</option>`;
-    }
-}
-
+// --- 5. DATA LOADING ---
 async function loadMyReports() {
     const container = document.getElementById('weekly-reports-container');
     if (!container) return;
-    container.innerHTML = "Fetching...";
-    const snap = await db.collection('users').doc(currentUser.uid).collection('sadhana').get();
-    if (snap.empty) { container.innerHTML = "No data."; return; }
-
-    const groups = {};
-    snap.docs.forEach(doc => {
-        const week = getWeekInfo(doc.id).label;
-        if (!groups[week]) groups[week] = [];
-        groups[week].push({ id: doc.id, ...doc.data() });
-    });
-
-    let html = "";
-    Object.keys(groups).sort().reverse().forEach(w => {
-        html += `<details class="card" open><summary>Week: ${w.split('_')[0]}</summary>
-        <table style="width:100%"><tr><th>Date</th><th>Score</th><th>%</th></tr>`;
-        groups[w].sort((a,b) => b.id.localeCompare(a.id)).forEach(e => {
-            html += `<tr><td>${formatToDDMM(e.id)}</td><td>${e.totalScore}</td><td>${e.dayPercent}%</td></tr>`;
+    container.innerHTML = "<h4>Loading your data...</h4>";
+    
+    try {
+        const snap = await db.collection('users').doc(currentUser.uid).collection('sadhana').get();
+        if (snap.empty) { container.innerHTML = "<p>No entries yet.</p>"; return; }
+        
+        let html = "";
+        snap.forEach(doc => {
+            const d = doc.data();
+            html += `<div class="card" style="margin-bottom:10px;">
+                        <strong>Date: ${formatToDDMM(doc.id)}</strong><br>
+                        Score: ${d.totalScore} | Percent: ${d.dayPercent}%
+                     </div>`;
         });
-        html += `</table></details>`;
-    });
-    container.innerHTML = html;
+        container.innerHTML = html;
+    } catch (e) { container.innerHTML = "Error loading reports."; }
 }
 
 async function loadAdminPanel() {
     const body = document.getElementById('admin-table-body');
     const head = document.getElementById('admin-table-header');
     if (!body) return;
-    head.innerHTML = "<th>Devotee</th><th>Level</th><th>Today %</th><th>Status</th>";
-    body.innerHTML = "<tr><td colspan='4'>Loading...</td></tr>";
-    const users = await db.collection('users').get();
-    const today = new Date().toISOString().split('T')[0];
-    let rows = "";
-    for (const uDoc of users.docs) {
-        const u = uDoc.data();
-        const sDoc = await db.collection('users').doc(uDoc.id).collection('sadhana').doc(today).get();
-        rows += `<tr><td>${u.name}</td><td>${u.level}</td><td>${sDoc.exists ? sDoc.data().dayPercent + '%' : '---'}</td><td>${sDoc.exists ? '✅' : '⏳'}</td></tr>`;
-    }
-    body.innerHTML = rows;
+    
+    head.innerHTML = "<th>Devotee</th><th>Position</th><th>Score</th><th>Status</th>";
+    body.innerHTML = "<tr><td colspan='4'>Syncing records...</td></tr>";
+
+    try {
+        const users = await db.collection('users').get();
+        const today = new Date().toISOString().split('T')[0];
+        let rows = "";
+        for (const uDoc of users.docs) {
+            const u = uDoc.data();
+            const sDoc = await db.collection('users').doc(uDoc.id).collection('sadhana').doc(today).get();
+            const score = sDoc.exists ? sDoc.data().dayPercent + '%' : '---';
+            rows += `<tr style="border-bottom: 1px solid #eee">
+                        <td>${u.name}</td>
+                        <td>${u.level}</td>
+                        <td>${score}</td>
+                        <td>${sDoc.exists ? '✅' : '⏳'}</td>
+                    </tr>`;
+        }
+        body.innerHTML = rows;
+    } catch (e) { body.innerHTML = "<tr><td colspan='4'>Admin sync failed.</td></tr>"; }
+}
+
+function setupDateSelect() {
+    const sel = document.getElementById('sadhana-date');
+    if(!sel) return;
+    sel.innerHTML = "";
+    [0, 1].forEach(i => {
+        const d = new Date(); d.setDate(d.getDate() - i);
+        const iso = d.toISOString().split('T')[0];
+        sel.innerHTML += `<option value="${iso}">${formatToDDMM(iso)}</option>`;
+    });
 }
 
 // --- 6. ACTIONS ---
-window.openProfileEdit = () => {
-    document.getElementById('profile-name').value = userProfile.name;
-    document.getElementById('profile-level').value = userProfile.level;
-    showSection('profile');
-};
-
 document.getElementById('sadhana-form').onsubmit = async (e) => {
     e.preventDefault();
     const dateId = document.getElementById('sadhana-date').value;
@@ -168,11 +167,11 @@ document.getElementById('sadhana-form').onsubmit = async (e) => {
         serviceMinutes: parseInt(document.getElementById('service-mins').value) || 0,
         notesMinutes: parseInt(document.getElementById('notes-mins').value) || 0,
         daySleepMinutes: parseInt(document.getElementById('daysleep-mins').value) || 0,
-        timestamp: firebase.firestore.FieldValue.serverTimestamp()
     };
     const res = calculateFinalScore(data, userProfile.level);
     await db.collection('users').doc(currentUser.uid).collection('sadhana').doc(dateId).set({...data, totalScore: res.total, dayPercent: res.percent});
-    alert("Saved!"); window.switchTab('reports');
+    alert("Sadhana Saved!");
+    window.switchTab('reports');
 };
 
 document.getElementById('login-form').onsubmit = (e) => {
@@ -186,20 +185,9 @@ document.getElementById('profile-form').onsubmit = async (e) => {
         name: document.getElementById('profile-name').value,
         level: document.getElementById('profile-level').value,
         role: userProfile?.role || 'user'
-    }, {merge: true});
+    }, { merge: true });
     location.reload();
 };
 
-window.downloadMasterReport = async () => {
-    const users = await db.collection('users').get();
-    let rows = [["Name", "Level", "Date", "Score", "%"]];
-    for (const u of users.docs) {
-        const sSnap = await db.collection('users').doc(u.id).collection('sadhana').get();
-        sSnap.forEach(s => rows.push([u.data().name, u.data().level, formatToDDMM(s.id), s.data().totalScore, s.data().dayPercent]));
-    }
-    const ws = XLSX.utils.aoa_to_sheet(rows), wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Master");
-    XLSX.writeFile(wb, "Sadhana_Master.xlsx");
-};
-
+window.openProfileEdit = () => showSection('profile');
 document.getElementById('logout-btn').onclick = () => auth.signOut();
