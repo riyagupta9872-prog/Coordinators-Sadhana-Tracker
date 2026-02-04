@@ -20,7 +20,6 @@ const t2m = (t) => {
     return h * 60 + m;
 };
 
-// Proper Date Formatter (DD/MM/YYYY)
 const formatToDDMM = (iso) => {
     const [y, m, d] = iso.split('-');
     return `${d}/${m}/${y}`;
@@ -30,8 +29,7 @@ function getWeekInfo(dateStr) {
     const d = new Date(dateStr);
     const sun = new Date(d); sun.setDate(d.getDate() - d.getDay());
     const sat = new Date(sun); sat.setDate(sun.getDate() + 6);
-    const f = (dt) => dt.toLocaleDateString('en-GB');
-    return { label: f(sun) + " to " + f(sat) + "_" + sun.getFullYear() };
+    return { label: sun.toLocaleDateString('en-GB') + " to " + sat.toLocaleDateString('en-GB') + "_" + sun.getFullYear() };
 }
 
 // --- 3. SCORING ENGINE ---
@@ -44,7 +42,7 @@ function calculateFinalScore(data, userLevel) {
     if (chnM <= 540) sc.chanting = 25; else if (chnM <= 570) sc.chanting = 20; else if (chnM <= 660) sc.chanting = 15; else if (chnM <= 870) sc.chanting = 10; else if (chnM <= 1020) sc.chanting = 5; else if (chnM <= 1140) sc.chanting = 0;
 
     const getActScore = (m, threshold) => {
-        if (m >= threshold) return 25; if (m >= threshold - 10) return 20; if (m >= 20) return 15; if (m >= 15) return 10; if (m >= 10) return 5; if (m >= 5) return 0; return -5;
+        if (m >= threshold) return 25; if (m >= 25) return 20; if (m >= 20) return 15; if (m >= 15) return 10; if (m >= 10) return 5; if (m >= 5) return 0; return -5;
     };
 
     const thresh = (userLevel === "Senior Batch") ? 40 : 30;
@@ -78,26 +76,33 @@ auth.onAuthStateChanged(async (user) => {
             if (userProfile.role === 'admin') document.getElementById('admin-tab-btn').classList.remove('hidden');
             showSection('dashboard');
             setupDateSelect();
+            // Load reports immediately to ensure tab is ready
             loadMyReports();
         } else { showSection('profile'); }
     } else { showSection('auth'); }
 });
 
 function showSection(id) {
+    // This handles switching between Auth, Profile, and Dashboard screens
     document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
     document.getElementById(id + '-section').classList.remove('hidden');
 }
 
-window.switchTab = (t) => {
-    document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.getElementById(t + '-tab').classList.remove('hidden');
-    if(event && event.currentTarget) event.currentTarget.classList.add('active');
-    if (t === 'admin') loadAdminPanel();
-    if (t === 'reports') loadMyReports();
+window.switchTab = (tabName) => {
+    // This handles switching internal dashboard tabs (Form, Reports, Admin)
+    document.querySelectorAll('.tab-content').forEach(content => content.classList.add('hidden'));
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    
+    const activeTab = document.getElementById(tabName + '-tab');
+    if (activeTab) activeTab.classList.remove('hidden');
+    
+    if (event && event.currentTarget) event.currentTarget.classList.add('active');
+    
+    if (tabName === 'reports') loadMyReports();
+    if (tabName === 'admin') loadAdminPanel();
 };
 
-// --- 5. CORE FUNCTIONS ---
+// --- 5. DATA LOADING ---
 function setupDateSelect() {
     const sel = document.getElementById('sadhana-date');
     if (!sel) return;
@@ -114,7 +119,7 @@ async function loadMyReports() {
     if (!container || !currentUser) return;
     const snap = await db.collection('users').doc(currentUser.uid).collection('sadhana').get();
     
-    if (snap.empty) { container.innerHTML = "<p class='card'>No reports yet.</p>"; return; }
+    if (snap.empty) { container.innerHTML = "<p class='card'>No sadhana data submitted yet.</p>"; return; }
 
     const groups = {};
     snap.forEach(doc => {
@@ -125,15 +130,17 @@ async function loadMyReports() {
 
     let html = "";
     Object.keys(groups).sort().reverse().forEach(w => {
-        html += `<details class="card" open style="margin-bottom:15px;">
-                    <summary style="cursor:pointer; font-weight:bold; padding:10px;">Week: ${w.split('_')[0]}</summary>
+        html += `<details class="card" open style="margin-bottom:15px; border:1px solid #eee;">
+                    <summary style="cursor:pointer; font-weight:bold; padding:10px; background:#f9f9f9;">Week: ${w.split('_')[0]}</summary>
                     <table style="width:100%; border-collapse:collapse; margin-top:10px;">
-                        <tr style="border-bottom:1px solid #ddd; text-align:left;"><th>Date</th><th>Score</th><th>%</th></tr>`;
+                        <tr style="border-bottom:2px solid #ddd; text-align:left;">
+                            <th style="padding:8px;">Date</th><th style="padding:8px;">Score</th><th style="padding:8px;">%</th>
+                        </tr>`;
         groups[w].sort((a,b) => b.id.localeCompare(a.id)).forEach(e => {
             html += `<tr style="border-bottom:1px solid #eee">
-                        <td style="padding:10px;">${formatToDDMM(e.id)}</td>
-                        <td>${e.totalScore}</td>
-                        <td style="font-weight:bold;">${e.dayPercent}%</td>
+                        <td style="padding:8px;">${formatToDDMM(e.id)}</td>
+                        <td style="padding:8px;">${e.totalScore}</td>
+                        <td style="padding:8px; font-weight:bold; color:var(--primary)">${e.dayPercent}%</td>
                      </tr>`;
         });
         html += "</table></details>";
@@ -143,33 +150,41 @@ async function loadMyReports() {
 
 async function loadAdminPanel() {
     const body = document.getElementById('admin-table-body');
-    const head = document.getElementById('admin-table-header');
-    if (!body) return;
-    head.innerHTML = "<th>Devotee</th><th>Level</th><th>Today %</th><th>Status</th>";
-    body.innerHTML = "<tr><td colspan='4'>Syncing database...</td></tr>";
+    const header = document.getElementById('admin-table-header');
+    if (!body || !header) return;
 
-    const users = await db.collection('users').get();
-    const today = new Date().toISOString().split('T')[0];
-    let rows = "";
-    for (const uDoc of users.docs) {
-        const u = uDoc.data();
-        const sDoc = await db.collection('users').doc(uDoc.id).collection('sadhana').doc(today).get();
-        let score = sDoc.exists ? sDoc.data().dayPercent + "%" : "Pending";
-        rows += `<tr>
-                    <td style="padding:10px;">${u.name}</td>
-                    <td>${u.level}</td>
-                    <td>${score}</td>
-                    <td>${sDoc.exists ? '✅' : '⏳'}</td>
-                 </tr>`;
+    header.innerHTML = "<th>Devotee Name</th><th>Level</th><th>Today %</th><th>Status</th>";
+    body.innerHTML = "<tr><td colspan='4' style='padding:20px; text-align:center;'>Syncing latest data...</td></tr>";
+
+    try {
+        const users = await db.collection('users').get();
+        const today = new Date().toISOString().split('T')[0];
+        let rows = "";
+        
+        for (const uDoc of users.docs) {
+            const u = uDoc.data();
+            const sDoc = await db.collection('users').doc(uDoc.id).collection('sadhana').doc(today).get();
+            let score = sDoc.exists ? sDoc.data().dayPercent + "%" : "---";
+            let status = sDoc.exists ? "<span style='color:var(--success)'>Done</span>" : "<span style='color:var(--warning)'>Pending</span>";
+            
+            rows += `<tr style="border-bottom:1px solid #eee">
+                        <td style="padding:10px;">${u.name}</td>
+                        <td style="padding:10px;">${u.level}</td>
+                        <td style="padding:10px; font-weight:bold;">${score}</td>
+                        <td style="padding:10px;">${status}</td>
+                     </tr>`;
+        }
+        body.innerHTML = rows;
+    } catch (err) {
+        body.innerHTML = `<tr><td colspan='4' style='color:red;'>Admin Access Denied: ${err.message}</td></tr>`;
     }
-    body.innerHTML = rows;
 }
 
-// --- 6. ACTIONS (Matches your HTML exactly) ---
+// --- 6. ACTIONS ---
 window.openProfileEdit = () => {
     if (userProfile) {
-        document.getElementById('profile-name').value = userProfile.name;
-        document.getElementById('profile-level').value = userProfile.level;
+        document.getElementById('profile-name').value = userProfile.name || "";
+        document.getElementById('profile-level').value = userProfile.level || "Coordinator";
         document.getElementById('cancel-edit').classList.remove('hidden');
         showSection('profile');
     }
@@ -177,18 +192,18 @@ window.openProfileEdit = () => {
 
 window.downloadMasterReport = async () => {
     const users = await db.collection('users').get();
-    let data = [["Name", "Level", "Date", "Score", "Percent"]];
+    let rows = [["Name", "Level", "Date", "Score", "Percent"]];
     for (const uDoc of users.docs) {
         const u = uDoc.data();
         const sadhana = await db.collection('users').doc(uDoc.id).collection('sadhana').get();
-        sadhana.forEach(s => data.push([u.name, u.level, formatToDDMM(s.id), s.data().totalScore, s.data().dayPercent]));
+        sadhana.forEach(s => rows.push([u.name, u.level, formatToDDMM(s.id), s.data().totalScore, s.data().dayPercent]));
     }
-    const ws = XLSX.utils.aoa_to_sheet(data), wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "SadhanaData");
-    XLSX.writeFile(wb, "Sadhana_Global_Report.xlsx");
+    const ws = XLSX.utils.aoa_to_sheet(rows), wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "SadhanaGlobal");
+    XLSX.writeFile(wb, "Sadhana_Tracker_Master.xlsx");
 };
 
-// --- 7. FORM SUBMISSIONS ---
+// --- 7. FORMS ---
 document.getElementById('sadhana-form').onsubmit = async (e) => {
     e.preventDefault();
     const dateId = document.getElementById('sadhana-date').value;
@@ -205,13 +220,14 @@ document.getElementById('sadhana-form').onsubmit = async (e) => {
     };
     const res = calculateFinalScore(data, userProfile.level);
     await db.collection('users').doc(currentUser.uid).collection('sadhana').doc(dateId).set({...data, totalScore: res.total, dayPercent: res.percent});
-    alert("Sadhana Saved!");
+    alert("Sadhana Submitted Successfully!");
     switchTab('reports');
 };
 
 document.getElementById('login-form').onsubmit = (e) => {
     e.preventDefault();
-    auth.signInWithEmailAndPassword(document.getElementById('login-email').value, document.getElementById('login-password').value).catch(err => alert(err.message));
+    auth.signInWithEmailAndPassword(document.getElementById('login-email').value, document.getElementById('login-password').value)
+        .catch(err => alert("Login Failed: " + err.message));
 };
 
 document.getElementById('profile-form').onsubmit = async (e) => {
