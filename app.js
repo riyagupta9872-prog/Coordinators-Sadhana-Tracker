@@ -12,7 +12,7 @@ if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth(), db = firebase.firestore();
 let currentUser = null, userProfile = null;
 
-// --- 2. HELPERS ---
+// --- 2. FORMATTERS ---
 const t2m = (t) => {
     if (!t) return 9999;
     let [h, m] = t.split(':').map(Number);
@@ -21,6 +21,7 @@ const t2m = (t) => {
 };
 
 const formatToDDMM = (iso) => {
+    if(!iso) return "";
     const [y, m, d] = iso.split('-');
     return `${d}/${m}/${y}`;
 };
@@ -42,7 +43,7 @@ function calculateFinalScore(data, userLevel) {
     if (chnM <= 540) sc.chanting = 25; else if (chnM <= 570) sc.chanting = 20; else if (chnM <= 660) sc.chanting = 15; else if (chnM <= 870) sc.chanting = 10; else if (chnM <= 1020) sc.chanting = 5; else if (chnM <= 1140) sc.chanting = 0;
 
     const getActScore = (m, threshold) => {
-        if (m >= threshold) return 25; if (m >= 25) return 20; if (m >= 20) return 15; if (m >= 15) return 10; if (m >= 10) return 5; if (m >= 5) return 0; return -5;
+        if (m >= threshold) return 25; if (m >= threshold - 10) return 20; if (m >= 20) return 15; if (m >= 15) return 10; if (m >= 10) return 5; if (m >= 5) return 0; return -5;
     };
 
     const thresh = (userLevel === "Senior Batch") ? 40 : 30;
@@ -76,28 +77,31 @@ auth.onAuthStateChanged(async (user) => {
             if (userProfile.role === 'admin') document.getElementById('admin-tab-btn').classList.remove('hidden');
             showSection('dashboard');
             setupDateSelect();
-            // Load reports immediately to ensure tab is ready
-            loadMyReports();
+            switchTab('form'); // Default tab on login
         } else { showSection('profile'); }
     } else { showSection('auth'); }
 });
 
 function showSection(id) {
-    // This handles switching between Auth, Profile, and Dashboard screens
     document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
-    document.getElementById(id + '-section').classList.remove('hidden');
+    const target = document.getElementById(id + '-section');
+    if (target) target.classList.remove('hidden');
 }
 
 window.switchTab = (tabName) => {
-    // This handles switching internal dashboard tabs (Form, Reports, Admin)
+    // Hide all contents inside dashboard
     document.querySelectorAll('.tab-content').forEach(content => content.classList.add('hidden'));
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
     
+    // Show specific tab
     const activeTab = document.getElementById(tabName + '-tab');
     if (activeTab) activeTab.classList.remove('hidden');
     
-    if (event && event.currentTarget) event.currentTarget.classList.add('active');
+    // Highlight button
+    const activeBtn = document.querySelector(`[onclick="switchTab('${tabName}')"]`);
+    if(activeBtn) activeBtn.classList.add('active');
     
+    // Load Data
     if (tabName === 'reports') loadMyReports();
     if (tabName === 'admin') loadAdminPanel();
 };
@@ -117,35 +121,37 @@ function setupDateSelect() {
 async function loadMyReports() {
     const container = document.getElementById('weekly-reports-container');
     if (!container || !currentUser) return;
-    const snap = await db.collection('users').doc(currentUser.uid).collection('sadhana').get();
     
-    if (snap.empty) { container.innerHTML = "<p class='card'>No sadhana data submitted yet.</p>"; return; }
+    container.innerHTML = "<p>Fetching your reports...</p>";
+    
+    try {
+        const snap = await db.collection('users').doc(currentUser.uid).collection('sadhana').orderBy('timestamp', 'desc').get();
+        if (snap.empty) { container.innerHTML = "<p class='card'>No sadhana data found.</p>"; return; }
 
-    const groups = {};
-    snap.forEach(doc => {
-        const week = getWeekInfo(doc.id).label;
-        if (!groups[week]) groups[week] = [];
-        groups[week].push({ id: doc.id, ...doc.data() });
-    });
-
-    let html = "";
-    Object.keys(groups).sort().reverse().forEach(w => {
-        html += `<details class="card" open style="margin-bottom:15px; border:1px solid #eee;">
-                    <summary style="cursor:pointer; font-weight:bold; padding:10px; background:#f9f9f9;">Week: ${w.split('_')[0]}</summary>
-                    <table style="width:100%; border-collapse:collapse; margin-top:10px;">
-                        <tr style="border-bottom:2px solid #ddd; text-align:left;">
-                            <th style="padding:8px;">Date</th><th style="padding:8px;">Score</th><th style="padding:8px;">%</th>
-                        </tr>`;
-        groups[w].sort((a,b) => b.id.localeCompare(a.id)).forEach(e => {
-            html += `<tr style="border-bottom:1px solid #eee">
-                        <td style="padding:8px;">${formatToDDMM(e.id)}</td>
-                        <td style="padding:8px;">${e.totalScore}</td>
-                        <td style="padding:8px; font-weight:bold; color:var(--primary)">${e.dayPercent}%</td>
-                     </tr>`;
+        const groups = {};
+        snap.forEach(doc => {
+            const week = getWeekInfo(doc.id).label;
+            if (!groups[week]) groups[week] = [];
+            groups[week].push({ id: doc.id, ...doc.data() });
         });
-        html += "</table></details>";
-    });
-    container.innerHTML = html;
+
+        let html = "";
+        Object.keys(groups).forEach(w => {
+            html += `<details class="card" open style="margin-bottom:15px;">
+                        <summary style="cursor:pointer; font-weight:bold; padding:10px;">Week: ${w.split('_')[0]}</summary>
+                        <table style="width:100%; border-collapse:collapse; margin-top:10px;">
+                            <tr style="border-bottom:2px solid #ddd; text-align:left;"><th>Date</th><th>Score</th><th>%</th></tr>`;
+            groups[w].forEach(e => {
+                html += `<tr style="border-bottom:1px solid #eee">
+                            <td style="padding:10px;">${formatToDDMM(e.id)}</td>
+                            <td>${e.totalScore}</td>
+                            <td style="font-weight:bold; color:var(--primary)">${e.dayPercent}%</td>
+                         </tr>`;
+            });
+            html += "</table></details>";
+        });
+        container.innerHTML = html;
+    } catch (err) { container.innerHTML = "Error loading reports: " + err.message; }
 }
 
 async function loadAdminPanel() {
@@ -154,7 +160,7 @@ async function loadAdminPanel() {
     if (!body || !header) return;
 
     header.innerHTML = "<th>Devotee Name</th><th>Level</th><th>Today %</th><th>Status</th>";
-    body.innerHTML = "<tr><td colspan='4' style='padding:20px; text-align:center;'>Syncing latest data...</td></tr>";
+    body.innerHTML = "<tr><td colspan='4'>Updating comparative list...</td></tr>";
 
     try {
         const users = await db.collection('users').get();
@@ -165,19 +171,17 @@ async function loadAdminPanel() {
             const u = uDoc.data();
             const sDoc = await db.collection('users').doc(uDoc.id).collection('sadhana').doc(today).get();
             let score = sDoc.exists ? sDoc.data().dayPercent + "%" : "---";
-            let status = sDoc.exists ? "<span style='color:var(--success)'>Done</span>" : "<span style='color:var(--warning)'>Pending</span>";
+            let status = sDoc.exists ? "✅" : "⏳";
             
             rows += `<tr style="border-bottom:1px solid #eee">
                         <td style="padding:10px;">${u.name}</td>
-                        <td style="padding:10px;">${u.level}</td>
-                        <td style="padding:10px; font-weight:bold;">${score}</td>
-                        <td style="padding:10px;">${status}</td>
+                        <td>${u.level}</td>
+                        <td style="font-weight:bold;">${score}</td>
+                        <td>${status}</td>
                      </tr>`;
         }
         body.innerHTML = rows;
-    } catch (err) {
-        body.innerHTML = `<tr><td colspan='4' style='color:red;'>Admin Access Denied: ${err.message}</td></tr>`;
-    }
+    } catch (err) { body.innerHTML = "<tr><td colspan='4'>Admin error: Check Firestore permissions.</td></tr>"; }
 }
 
 // --- 6. ACTIONS ---
@@ -199,8 +203,8 @@ window.downloadMasterReport = async () => {
         sadhana.forEach(s => rows.push([u.name, u.level, formatToDDMM(s.id), s.data().totalScore, s.data().dayPercent]));
     }
     const ws = XLSX.utils.aoa_to_sheet(rows), wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "SadhanaGlobal");
-    XLSX.writeFile(wb, "Sadhana_Tracker_Master.xlsx");
+    XLSX.utils.book_append_sheet(wb, ws, "GlobalData");
+    XLSX.writeFile(wb, "Sadhana_Global_Report.xlsx");
 };
 
 // --- 7. FORMS ---
@@ -220,14 +224,14 @@ document.getElementById('sadhana-form').onsubmit = async (e) => {
     };
     const res = calculateFinalScore(data, userProfile.level);
     await db.collection('users').doc(currentUser.uid).collection('sadhana').doc(dateId).set({...data, totalScore: res.total, dayPercent: res.percent});
-    alert("Sadhana Submitted Successfully!");
+    alert("Sadhana Saved!");
     switchTab('reports');
 };
 
 document.getElementById('login-form').onsubmit = (e) => {
     e.preventDefault();
     auth.signInWithEmailAndPassword(document.getElementById('login-email').value, document.getElementById('login-password').value)
-        .catch(err => alert("Login Failed: " + err.message));
+        .catch(err => alert("Error: " + err.message));
 };
 
 document.getElementById('profile-form').onsubmit = async (e) => {
