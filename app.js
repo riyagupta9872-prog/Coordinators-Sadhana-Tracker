@@ -43,9 +43,9 @@ function getNRData(date) {
 
 function calculateFinalScore(data, userLevel) {
     // 1. Convert Time to Minutes (t2m helper)
-    const slpM = t2m(data.sleepTime, true);
-    const wakM = t2m(data.wakeupTime, false);
-    const chnM = t2m(data.chantingTime, false);
+    const slpM = t2m(data.sleepTime);
+    const wakM = t2m(data.wakeupTime);
+    const chnM = t2m(data.chantingTime);
 
     // 2. Initialize scores with default penalty (-5)
     const sc = { sleep: -5, wakeup: -5, chanting: -5, reading: -5, hearing: -5, service: -5, notes: -5, daySleep: 0 };
