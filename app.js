@@ -38,6 +38,7 @@ function getNRData(date) {
         readingMinutes: 0, hearingMinutes: 0, serviceMinutes: 0, daySleepMinutes: 0,
         scores: { sleep: -5, wakeup: -5, chanting: -5, reading: -5, hearing: -5, service: -5, daySleep: 0 }
     };
+    } //
 
 // --- 3. SCORING ENGINE ---
 
