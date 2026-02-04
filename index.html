@@ -1,116 +1,36 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sadhana Management & Audit System</title>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
-    <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
-    <link rel="stylesheet" href="style.css">
-</head>
-<body>
-    <div id="app" class="container">
-        <section id="auth-section" class="card">
-            <h2>Sadhana Audit System</h2>
-            <form id="login-form">
-                <input type="email" id="login-email" placeholder="Email" required>
-                <input type="password" id="login-password" placeholder="Password" required>
-                <button type="submit">Login</button>
-            </form>
-        </section>
+<nav class="nav-tabs">
+    <button class="tab-btn active" data-tab="entry">Entry</button>
+    <button class="tab-btn" data-tab="reports">Reports</button>
+    <button class="tab-btn hidden" id="admin-tab-btn" data-tab="admin">Admin</button>
+</nav>
 
-        <section id="profile-section" class="card hidden">
-            <h2>Complete Your Profile</h2>
-            <form id="profile-form">
-                <input type="text" id="profile-name" placeholder="Full Name" required>
-                
-                <label>Chanting Category:</label>
-                <select id="profile-category" required>
-                    <option value="Level 1 (1 to 4 Rounds)">Level 1 (1 to 4 Rounds)</option>
-                    <option value="Level 2 (5 to 8 Rounds)">Level 2 (5 to 8 Rounds)</option>
-                    <option value="Level 3 (9 to 15 Rounds)">Level 3 (9 to 15 Rounds)</option>
-                    <option value="Level 4 (16 Rounds)">Level 4 (16 Rounds)</option>
-                </select>
+<div id="entry-tab" class="tab-content">
+    <form id="sadhana-form" class="card">
+        <label>Chanting (Last round by):</label>
+        <input type="time" id="chanting-time" required>
 
-                <label>Level:</label>
-                <select id="profile-level" required onchange="toggleSpecialFields()">
-                    <option value="Senior Batch">Senior Batch</option>
-                    <option value="IGF Coordinators">IGF Coordinators</option>
-                    <option value="Youth Overall Coordinator">Youth Overall Coordinator</option>
-                </select>
+        <label>Reading (Pathan) - Mins:</label>
+        <input type="number" id="pathan-mins" value="0">
 
-                <input type="number" id="profile-exact-rounds" placeholder="Exact Number of Rounds" required>
-                <button type="submit">Save Profile</button>
-                <button type="button" onclick="showSection('dashboard')" id="cancel-edit" class="hidden" style="background:#95a5a6">Cancel</button>
-            </form>
-        </section>
+        <label>Hearing (Shravan) - Mins:</label>
+        <input type="number" id="shravan-mins" value="0">
 
-        <section id="dashboard-section" class="hidden">
-            <div class="header">
-                <div>
-                    <h3 id="user-display-name"></h3>
-                    <button onclick="openProfileEdit()" class="btn-small">Edit Profile</button>
-                </div>
-                <button id="logout-btn" class="btn-danger">Logout</button>
-            </div>
+        <label id="service-label">Service (Seva) / Notes - Mins:</label>
+        <input type="number" id="service-mins" value="0">
+        
+        <hr>
+        <label>Bed Time:</label><input type="time" id="sleep-time" required>
+        <label>Wake Up:</label><input type="time" id="wakeup-time" required>
+        <label>Day Sleep (Mins):</label><input type="number" id="day-sleep" value="0">
 
-            <div class="nav-tabs">
-                <button class="tab-btn active" onclick="switchTab('sadhana')">Entry</button>
-                <button class="tab-btn" onclick="switchTab('reports')">Reports</button>
-                <button class="tab-btn hidden" id="admin-tab-btn" onclick="switchTab('admin')">Admin</button>
-            </div>
+        <button type="submit" class="btn-success">Submit Audit</button>
+    </form>
+</div>
 
-            <div id="sadhana-tab" class="tab-content">
-                <form id="sadhana-form" class="card">
-                    <label>Date:</label><select id="sadhana-date" required></select>
-                    
-                    <div class="form-grid">
-                        <div>
-                            <label>Yesterday Sleep:</label>
-                            <input type="time" id="sleep-time" required>
-                        </div>
-                        <div>
-                            <label>Wake Up Time:</label>
-                            <input type="time" id="wakeup-time" required>
-                        </div>
-                    </div>
+<div id="reports-tab" class="tab-content hidden">
+    <div id="user-reports"></div>
+</div>
 
-                    <label>Chanting (Last round by):</label>
-                    <input type="time" id="chanting-time" required>
-
-                    <label>Reading (Pathan) - Mins:</label>
-                    <input type="number" id="reading-mins" value="0" min="0">
-
-                    <label>Hearing (Shravan) - Mins:</label>
-                    <input type="number" id="hearing-mins" value="0" min="0">
-
-                    <div id="senior-activity-box" class="hidden">
-                        <label style="color:var(--primary-dark)">Notes Revision (Mins):</label>
-                        <input type="number" id="notes-revision" value="0" min="0">
-                    </div>
-
-                    <label>Day Sleep (Mins):</label>
-                    <input type="number" id="day-sleep-minutes" value="0" required>
-
-                    <button type="submit" class="btn-success">Submit Daily Sadhana</button>
-                </form>
-            </div>
-
-            <div id="reports-tab" class="tab-content hidden">
-                <div id="weekly-reports-container"></div>
-            </div>
-
-            <div id="admin-tab" class="tab-content hidden">
-                <div class="card">
-                    <h3>Audit Controls</h3>
-                    <button onclick="downloadMasterReport()" class="btn-success">Download Master Excel</button>
-                </div>
-                <div id="admin-users-list"></div>
-            </div>
-        </section>
-    </div>
-    <script src="app.js"></script>
-</body>
-</html>
+<div id="admin-tab" class="tab-content hidden">
+    <div id="admin-panel"></div>
+</div>
