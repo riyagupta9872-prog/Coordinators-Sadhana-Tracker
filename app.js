@@ -7,31 +7,44 @@ const firebaseConfig = {
     messagingSenderId: "926961218888",
     appId: "1:926961218888:web:db8f12ef8256d13f036f7d"
 };
-if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth(), db = firebase.firestore();
-let currentUser = null, userProfile = null;
+
+if (!firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
+}
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+let currentUser = null;
+let userProfile = null;
 
 // --- 2. TIME HELPERS ---
 const t2m = (t) => {
     if (!t) return 9999;
-    let [h, m] = t.split(':').map(Number);
+    let parts = t.split(':');
+    let h = parseInt(parts[0]);
+    let m = parseInt(parts[1]);
     if (h >= 0 && h <= 4) h += 24; 
     return h * 60 + m;
 };
 
 function getWeekInfo(dateStr) {
     const d = new Date(dateStr);
-    const sun = new Date(d); sun.setDate(d.getDate() - d.getDay());
-    const sat = new Date(sun); sat.setDate(sun.getDate() + 6);
+    const sun = new Date(d);
+    sun.setDate(d.getDate() - d.getDay());
+    const sat = new Date(sun);
+    sat.setDate(sun.getDate() + 6);
     const fmt = (date) => {
         const day = String(date.getDate()).padStart(2, '0');
         const month = date.toLocaleString('en-GB', { month: 'short' });
-        return `${day} ${month}`;
+        return day + " " + month;
     };
-    return { sunStr: sun.toISOString().split('T')[0], label: `${fmt(sun)} to ${fmt(sat)}_${sun.getFullYear()}` };
+    return { 
+        sunStr: sun.toISOString().split('T')[0], 
+        label: fmt(sun) + " to " + fmt(sat) + "_" + sun.getFullYear() 
+    };
 }
 
-// --- 3. SCORING ENGINE (Directly from your Doc) ---
+// --- 3. SCORING ENGINE ---
 function calculateFinalScore(data, userLevel) {
     const slpM = t2m(data.sleepTime);
     const wakM = t2m(data.wakeupTime);
@@ -90,7 +103,7 @@ function calculateFinalScore(data, userLevel) {
         sc.service = getActScore(data.serviceMinutes, 30);
         total += sc.service;
     }
-    return { total, percent: Math.round((total / 160) * 100) };
+    return { total: total, percent: Math.round((total / 160) * 100) };
 }
 
 // --- 4. AUTH & PROFILE ---
@@ -118,7 +131,7 @@ auth.onAuthStateChanged(async (user) => {
     }
 });
 
-// --- 5. REPORT FETCHING (Weekly Collapsible) ---
+// --- 5. REPORT FETCHING ---
 async function loadMyReports() {
     const container = document.getElementById('weekly-reports-container');
     if (!container || !currentUser) return;
@@ -139,19 +152,19 @@ async function loadMyReports() {
 
     let html = "";
     Object.keys(weeklyGroups).sort().reverse().forEach(week => {
-        html += `
-        <details class="card" style="margin-bottom:10px; cursor:pointer;">
-            <summary style="font-weight:bold; padding:5px;">Week: ${week.split('_')[0]}</summary>
-            <table style="width:100%; border-collapse:collapse; margin-top:10px;">
-                <tr style="border-bottom:1px solid #eee; text-align:left;">
-                    <th>Date</th><th>Score</th><th>%</th>
-                </tr>
-                ${weeklyGroups[week].sort((a,b) => b.id.localeCompare(a.id)).map(e => `
-                <tr style="border-bottom:1px solid #f9f9f9;">
-                    <td style="padding:8px;">${e.id}</td><td>${e.totalScore}</td><td><strong>${e.dayPercent}%</strong></td>
-                </tr>`).join('')}
-            </table>
-        </details>`;
+        html += "<details class='card' style='margin-bottom:10px; cursor:pointer;'>";
+        html += "<summary style='font-weight:bold; padding:5px;'>Week: " + week.split('_')[0] + "</summary>";
+        html += "<table style='width:100%; margin-top:10px; border-collapse:collapse;'>";
+        html += "<tr style='border-bottom:1px solid #eee; text-align:left;'><th>Date</th><th>Score</th><th>%</th></tr>";
+        
+        let sortedEntries = weeklyGroups[week].sort((a,b) => b.id.localeCompare(a.id));
+        sortedEntries.forEach(e => {
+            html += "<tr style='border-bottom:1px solid #f9f9f9;'>";
+            html += "<td style='padding:8px;'>" + e.id + "</td><td>" + e.totalScore + "</td><td><strong>" + e.dayPercent + "%</strong></td>";
+            html += "</tr>";
+        });
+        
+        html += "</table></details>";
     });
     container.innerHTML = html;
 }
@@ -194,15 +207,15 @@ document.getElementById('sadhana-form').onsubmit = async (e) => {
         hearingMinutes: parseInt(document.getElementById('hearing-mins').value) || 0,
         serviceMinutes: parseInt(document.getElementById('service-mins').value) || 0,
         notesMinutes: parseInt(document.getElementById('notes-mins').value) || 0,
-        daySleepMinutes: parseInt(document.getElementById('daysleep-mins').value) || 0,
-        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        daySleepMinutes: parseInt(document.getElementById('daysleep-mins').value) || 0
     };
     const result = calculateFinalScore(data, userProfile.level);
     const dateId = document.getElementById('sadhana-date').value;
     await db.collection('users').doc(currentUser.uid).collection('sadhana').doc(dateId).set({ 
         ...data, 
         totalScore: result.total, 
-        dayPercent: result.percent 
+        dayPercent: result.percent,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
     });
     alert("Sadhana Submitted!");
     loadMyReports();
@@ -238,7 +251,9 @@ function setupDateSelect() {
 
 document.getElementById('login-form').onsubmit = (e) => {
     e.preventDefault();
-    auth.signInWithEmailAndPassword(document.getElementById('login-email').value, document.getElementById('login-password').value)
-        .catch(err => alert(err.message));
+    const email = document.getElementById('login-email').value;
+    const pass = document.getElementById('login-password').value;
+    auth.signInWithEmailAndPassword(email, pass).catch(err => alert(err.message));
 };
+
 document.getElementById('logout-btn').onclick = () => auth.signOut();
