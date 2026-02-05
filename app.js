@@ -1,79 +1,51 @@
 // ==========================================
-// SECTION 1: AUTHENTICATION (Login & Register)
+// 1. INITIALIZATION & GLOBAL SCOPE
+// ==========================================
+const firebaseConfig = {
+    apiKey: "AIzaSyDbRy8ZMJAWeTyZVnTphwRIei6jAckagjA",
+    authDomain: "sadhana-tracker-b65ff.firebaseapp.com",
+    projectId: "sadhana-tracker-b65ff",
+    storageBucket: "sadhana-tracker-b65ff.firebasestorage.app",
+    messagingSenderId: "926961218888",
+    appId: "1:926961218888:web:db8f12ef8256d13f036f7d"
+};
+
+if (!firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
+}
+
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+let currentUser = null;
+let userProfile = null;
+
+// ==========================================
+// 2. AUTHENTICATION & PROFILE LOGIC
 // ==========================================
 
-// 1.1 Form Submission Logic (Login/Signup)
+// Login/Register Handler
 document.getElementById('login-form').onsubmit = async (e) => {
     e.preventDefault();
     const email = document.getElementById('login-email').value;
     const password = document.getElementById('login-password').value;
-    const btn = e.target.querySelector('button');
-
     try {
-        btn.innerText = "Processing...";
-        btn.disabled = true;
-
-        // Try Login
         try {
             await auth.signInWithEmailAndPassword(email, password);
-            console.log("Login Successful");
         } catch (err) {
-            // Agar user nahi mila toh automatic Register kar do (As per your flow)
             if (err.code === 'auth/user-not-found') {
                 await auth.createUserWithEmailAndPassword(email, password);
-                alert("Account Created Successfully!");
-            } else {
-                throw err;
-            }
+                alert("Account Created!");
+            } else { throw err; }
         }
-    } catch (error) {
-        console.error("Auth Error:", error);
-        alert("Error: " + error.message);
-    } finally {
-        btn.innerText = "Login / Register";
-        btn.disabled = false;
-    }
+    } catch (error) { alert("Error: " + error.message); }
 };
 
-// 1.2 Profile Section Handler (New Users)
-document.getElementById('profile-form').onsubmit = async (e) => {
-    e.preventDefault();
-    
-    const profileData = {
-        displayName: document.getElementById('display-name').value,
-        devoteeId: document.getElementById('devotee-id').value,
-        level: document.getElementById('user-level').value, // Senior Batch or Others
-        chantingCategory: document.getElementById('chanting-category').value,
-        exactRounds: document.getElementById('exact-rounds').value,
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    };
-
-    if (!profileData.displayName || !profileData.devoteeId) {
-        alert("Please fill all mandatory fields.");
-        return;
-    }
-
-    try {
-        await db.collection('users').doc(currentUser.uid).set(profileData);
-        alert("Profile Setup Complete!");
-        location.reload(); // Refresh to load dashboard
-    } catch (error) {
-        console.error("Profile Save Error:", error);
-        alert("Error saving profile: " + error.message);
-    }
-};
-
-// ==========================================
-// SECTION 2: IDENTITY & STATE (onAuthStateChanged)
-// ==========================================
-
+// State Observer
 auth.onAuthStateChanged(async (user) => {
     if (user) {
         currentUser = user;
-        console.log("User detected:", user.email);
-        
         const doc = await db.collection('users').doc(user.uid).get();
-        
         if (doc.exists) {
             const data = doc.data();
             userProfile = {
@@ -83,281 +55,186 @@ auth.onAuthStateChanged(async (user) => {
                 exactRounds: data.exactRounds || "",
                 isAdmin: data.devoteeId === "Admin01"
             };
-
-            // UI Updates
-            if(document.getElementById('user-display-name')) {
-                document.getElementById('user-display-name').innerText = userProfile.displayName;
-            }
-            
-            // Toggle Senior Fields
-            const notesField = document.getElementById('notes-revision-field');
-            if (userProfile.level === "Senior Batch" && notesField) {
-                notesField.classList.remove('hidden');
-            }
-
-            // Toggle Admin Tab
-            const adminTab = document.getElementById('admin-tab-btn');
-            if (userProfile.isAdmin && adminTab) {
-                adminTab.classList.remove('hidden');
-            }
-
-            showSection('dashboard-section'); 
-            switchTab('sadhana'); // PRD: Default tab for existing users
+            document.getElementById('user-display-name').innerText = userProfile.displayName;
+            if (userProfile.level === "Senior Batch") document.getElementById('notes-revision-field')?.classList.remove('hidden');
+            if (userProfile.isAdmin) document.getElementById('admin-tab-btn')?.classList.remove('hidden');
+            showSection('dashboard-section');
+            switchTab('sadhana');
         } else {
-            // Naya User: Profile Setup Section dikhao
             showSection('profile-section');
-            if(document.getElementById('profile-cancel-btn')) {
-                document.getElementById('profile-cancel-btn').classList.add('hidden');
-            }
+            document.getElementById('profile-cancel-btn')?.classList.add('hidden');
         }
     } else {
-        // Logged Out
         showSection('auth-section');
     }
 });
 
-// Utility to switch main sections
-function showSection(id) {
-    document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
-    document.getElementById(id)?.classList.remove('hidden');
-}
-// 3. Profile Save aur Update Button
+// Profile Save Logic
 document.getElementById('profile-form').onsubmit = async (e) => {
     e.preventDefault();
-    
-    const updatedData = {
-        displayName: document.getElementById('profile-name').value,
-        level: document.getElementById('profile-level').value,
-        chantingCategory: document.getElementById('profile-chanting').value,
-        exactRounds: document.getElementById('profile-exact-rounds').value,
-        email: currentUser.email,
-        lastUpdated: new Date()
+    const profileData = {
+        displayName: document.getElementById('display-name').value,
+        devoteeId: document.getElementById('devotee-id').value,
+        level: document.getElementById('user-level').value,
+        chantingCategory: document.getElementById('chanting-category').value,
+        exactRounds: document.getElementById('exact-rounds').value,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     };
-
     try {
-        // Firebase mein data update karna (Same email/UID ke liye)
-        await db.collection('users').doc(currentUser.uid).set(updatedData, { merge: true });
-        alert("Profile Updated Successfully!");
-        location.reload(); // Refresh to apply changes
-    } catch (error) {
-        alert("Error updating profile: " + error.message);
-    }
+        await db.collection('users').doc(currentUser.uid).set(profileData, { merge: true });
+        alert("Profile Saved!");
+        location.reload();
+    } catch (error) { alert("Error: " + error.message); }
 };
 
-// 4. Cancel Button Logic
-window.cancelProfileEdit = () => {
-    showSection('dashboard-section');
-};
-
-// Helper to switch screens
-function showSection(id) {
-    document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
-    const target = document.getElementById(id);
-    if(target) target.classList.remove('hidden');
-}
 // ==========================================
-// SECTION 3: THE LOCKED SCORING ENGINE
+// 3. SCORING ENGINE
 // ==========================================
-
-// Helper: Time ko minutes mein badalna (Fixed for your thresholds)
 const t2m = (timeStr, isSleepTime = false) => {
     if (!timeStr) return 9999; 
     let [hrs, mins] = timeStr.split(':').map(Number);
-    // Agar raat ke 12 se 4 ke beech soya hai toh use 24+ ghante maanna
     if (isSleepTime && hrs >= 0 && hrs <= 4) hrs += 24; 
     return (hrs * 60) + mins;
 };
 
 function calculateFinalScore(data, userLevel) {
-    // 1. Time conversion (As per your Doc logic)
-    const slpM = t2m(data.sleepTime, true);  // Sleep (Target 10:30 PM)
-    const wakM = t2m(data.wakeupTime, false); // Wakeup (Target 5:05 AM)
-    const chnM = t2m(data.chantingTime, false); // Chanting Finish Time
-
-    // 2. Initialize scores with penalty
+    const slpM = t2m(data.sleepTime, true);
+    const wakM = t2m(data.wakeupTime, false);
+    const chnM = t2m(data.chantingTime, false);
     const sc = { sleep: -5, wakeup: -5, chanting: -5, reading: -5, hearing: -5, service: -5, notes: -5, daySleep: 0 };
 
-    // --- LOCKED SCALES (Strictly from your Doc) ---
-    
-    // Sleep Scoring
-    if (slpM <= 1350) sc.sleep = 25; 
-    else if (slpM <= 1355) sc.sleep = 20; 
-    else if (slpM <= 1360) sc.sleep = 15; 
-    else if (slpM <= 1365) sc.sleep = 10; 
-    else if (slpM <= 1370) sc.sleep = 5; 
-    else if (slpM <= 1375) sc.sleep = 0;
+    if (slpM <= 1350) sc.sleep = 25; else if (slpM <= 1355) sc.sleep = 20; else if (slpM <= 1360) sc.sleep = 15; else if (slpM <= 1365) sc.sleep = 10; else if (slpM <= 1370) sc.sleep = 5; else if (slpM <= 1375) sc.sleep = 0;
+    if (wakM <= 305) sc.wakeup = 25; else if (wakM <= 310) sc.wakeup = 20; else if (wakM <= 315) sc.wakeup = 15; else if (wakM <= 320) sc.wakeup = 10; else if (wakM <= 325) sc.wakeup = 5; else if (wakM <= 330) sc.wakeup = 0;
+    if (chnM <= 540) sc.chanting = 25; else if (chnM <= 570) sc.chanting = 20; else if (chnM <= 660) sc.chanting = 15; else if (chnM <= 870) sc.chanting = 10; else if (chnM <= 1020) sc.chanting = 5; else if (chnM <= 1140) sc.chanting = 0;
 
-    // Wakeup Scoring
-    if (wakM <= 305) sc.wakeup = 25; 
-    else if (wakM <= 310) sc.wakeup = 20; 
-    else if (wakM <= 315) sc.wakeup = 15; 
-    else if (wakM <= 320) sc.wakeup = 10; 
-    else if (wakM <= 325) sc.wakeup = 5; 
-    else if (wakM <= 330) sc.wakeup = 0;
-
-    // Chanting Finish Time Scoring
-    if (chnM <= 540) sc.chanting = 25; 
-    else if (chnM <= 570) sc.chanting = 20; 
-    else if (chnM <= 660) sc.chanting = 15; 
-    else if (chnM <= 870) sc.chanting = 10; 
-    else if (chnM <= 1020) sc.chanting = 5; 
-    else if (chnM <= 1140) sc.chanting = 0;
-
-    // Reading & Hearing (Threshold depends on Level)
     const getActScore = (m, threshold) => {
-        if (m >= threshold) return 25;
-        if (m >= threshold - 10) return 20;
-        if (m >= 20) return 15;
-        if (m >= 15) return 10;
-        if (m >= 10) return 5;
-        if (m >= 5) return 0;
-        return -5;
+        if (m >= threshold) return 25; if (m >= threshold - 10) return 20; if (m >= 20) return 15; if (m >= 15) return 10; if (m >= 10) return 5; if (m >= 5) return 0; return -5;
     };
 
     const currentThresh = (userLevel === "Senior Batch") ? 40 : 30;
     sc.reading = getActScore(data.readingMinutes, currentThresh);
     sc.hearing = getActScore(data.hearingMinutes, currentThresh);
-    
-    // Day Sleep Penalty
     sc.daySleep = (data.daySleepMinutes <= 60) ? 10 : -5;
 
     let total = sc.sleep + sc.wakeup + sc.chanting + sc.reading + sc.hearing + sc.daySleep;
 
-    // --- LEVEL SPECIFIC SCORING (Notes Revision logic) ---
     if (userLevel === "Senior Batch") {
-        // Service (Max 10 for Seniors)
         const s = data.serviceMinutes;
         if (s >= 15) sc.service = 10; else if (s >= 10) sc.service = 5; else if (s >= 5) sc.service = 0; else sc.service = -5;
-
-        // Notes Revision (Max 15 for Seniors)
         const n = data.notesMinutes;
         if (n >= 20) sc.notes = 15; else if (n >= 15) sc.notes = 10; else if (n >= 10) sc.notes = 5; else if (n >= 5) sc.notes = 0; else sc.notes = -5;
-        
         total += (sc.service + sc.notes);
     } else {
-        // Others get full 25 for Service
         sc.service = getActScore(data.serviceMinutes, 30);
         total += sc.service;
     }
-
-    return { 
-        totalScore: total, 
-        dayPercent: Math.round((total / 160) * 100) 
-    };
+    return { totalScore: total, dayPercent: Math.round((total / 160) * 100), sc };
 }
-// ==========================================
-// SECTION 4 & 5: CALENDAR REPORTS & ADMIN (LOCKED)
-// ==========================================
 
-// 1. Helper: PRD Sunday-to-Saturday Logic
+// ==========================================
+// 4. SADHANA SUBMISSION
+// ==========================================
+document.getElementById('sadhana-form').onsubmit = async (e) => {
+    e.preventDefault();
+    const dateId = document.getElementById('sadhana-date').value;
+    const formData = {
+        sleepTime: document.getElementById('sleep-time').value,
+        wakeupTime: document.getElementById('wakeup-time').value,
+        chantingTime: document.getElementById('chanting-time').value,
+        readingMinutes: parseInt(document.getElementById('reading-mins').value) || 0,
+        hearingMinutes: parseInt(document.getElementById('hearing-mins').value) || 0,
+        serviceMinutes: parseInt(document.getElementById('service-mins').value) || 0,
+        notesMinutes: parseInt(document.getElementById('notes-mins').value) || 0,
+        daySleepMinutes: parseInt(document.getElementById('daysleep-mins').value) || 0
+    };
+    const res = calculateFinalScore(formData, userProfile.level);
+    try {
+        await db.collection('users').doc(currentUser.uid).collection('sadhana').doc(dateId).set({
+            ...formData,
+            scSleep: res.sc.sleep, scWakeup: res.sc.wakeup, scChanting: res.sc.chanting,
+            scReading: res.sc.reading, scHearing: res.sc.hearing, scService: res.sc.service,
+            scNotes: res.sc.notes, scDaySleep: res.sc.daySleep,
+            totalScore: res.totalScore, dayPercent: res.dayPercent
+        }, { merge: true });
+        alert("Sadhana Submitted!");
+        switchTab('reports');
+    } catch (error) { alert("Error: " + error.message); }
+};
+
+// ==========================================
+// 5. REPORTS & ADMIN PANEL
+// ==========================================
 function getWeekRange(dateStr) {
     const d = new Date(dateStr);
-    const day = d.getDay(); // 0 (Sun) to 6 (Sat)
-    const sun = new Date(d);
-    sun.setDate(d.getDate() - day);
-    const sat = new Date(sun);
-    sat.setDate(sun.getDate() + 6);
-    
+    const day = d.getDay();
+    const sun = new Date(d); sun.setDate(d.getDate() - day);
+    const sat = new Date(sun); sat.setDate(sun.getDate() + 6);
     const options = { month: 'short', day: 'numeric' };
     return {
         key: sun.toISOString().split('T')[0],
+        end: sat.toISOString().split('T')[0],
         label: `Week: ${sun.toLocaleDateString(undefined, options)} - ${sat.toLocaleDateString(undefined, options)}`
     };
 }
 
-// 2. My Reports: 4-Week Collapsible (PRD Style)
 async function loadMyReports() {
     const container = document.getElementById('weekly-reports-container');
-    if (!container) return;
-    container.innerHTML = "Syncing with records...";
-
-    const snap = await db.collection('users').doc(currentUser.uid)
-                         .collection('sadhana').orderBy(firebase.firestore.FieldPath.documentId(), "desc").get();
-    
-    let weeklyGroups = {};
+    const snap = await db.collection('users').doc(currentUser.uid).collection('sadhana').get();
+    let groups = {};
     snap.forEach(doc => {
         const info = getWeekRange(doc.id);
-        if (!weeklyGroups[info.key]) weeklyGroups[info.key] = { label: info.label, days: [], totalWeekScore: 0 };
+        if (!groups[info.key]) groups[info.key] = { label: info.label, days: [], total: 0 };
         const d = doc.data();
-        weeklyGroups[info.key].days.push({ id: doc.id, ...d });
-        weeklyGroups[info.key].totalWeekScore += (d.totalScore || 0);
+        groups[info.key].days.push({ id: doc.id, ...d });
+        groups[info.key].total += (d.totalScore || 0);
     });
-
-    const sortedWeeks = Object.keys(weeklyGroups).sort().reverse().slice(0, 4);
-    let html = `<h3>My Reports (Last 4 Weeks) <button onclick="downloadMyExcel()" style="width:auto; font-size:11px;">Export Excel</button></h3>`;
-
+    const sortedWeeks = Object.keys(groups).sort().reverse().slice(0, 4);
+    let html = `<h3>My Reports</h3>`;
     sortedWeeks.forEach(key => {
-        const week = weeklyGroups[key];
-        const weekAvg = Math.round((week.totalWeekScore / 1120) * 100); // 160 * 7 = 1120 
-        const weekClass = weekAvg < 40 ? 'score-negative' : ''; //
-
-        html += `
-        <details class="card" style="margin-bottom:12px; border:1px solid var(--primary);">
-            <summary style="padding:12px; cursor:pointer; list-style:none; display:flex; justify-content:space-between; align-items:center; background:#f8f9fa;">
-                <strong>${week.label}</strong>
-                <span class="badge ${weekClass}" style="padding:4px 12px; border-radius:12px; border:1px solid #ddd;">Avg: ${weekAvg}%</span>
-            </summary>
-            <div style="padding:10px; overflow-x:auto;">
-                <table style="width:100%; border-collapse:collapse; font-size:12px; text-align:left;">
-                    <thead style="background:#eee;">
-                        <tr><th>Date</th><th>Sleep</th><th>Wakeup</th><th>Chanting</th><th>R/H</th><th>Score</th><th>%</th></tr>
-                    </thead>
-                    <tbody>
-                        ${week.days.map(day => `
-                            <tr style="border-bottom:1px solid #f1f1f1;">
-                                <td>${day.id}</td>
-                                <td>${day.sleepTime} (${day.scSleep || 0})</td>
-                                <td>${day.wakeupTime} (${day.scWakeup || 0})</td>
-                                <td>${day.chantingTime} (${day.scChanting || 0})</td>
-                                <td>${day.readingMinutes}/${day.hearingMinutes}</td>
-                                <td>${day.totalScore}</td>
-                                <td class="${day.dayPercent < 40 ? 'score-negative' : ''}">${day.dayPercent}%</td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
-            </div>
-        </details>`;
+        const w = groups[key];
+        const avg = Math.round((w.total / 1120) * 100);
+        html += `<details class="card"><summary><strong>${w.label}</strong> (Avg: ${avg}%)</summary>
+        <table style="width:100%; font-size:12px;">
+            ${w.days.map(day => `<tr><td>${day.id}</td><td>${day.totalScore}</td><td>${day.dayPercent}%</td></tr>`).join('')}
+        </table></details>`;
     });
-    container.innerHTML = html || "<p>No entries yet.</p>";
+    container.innerHTML = html;
 }
 
-// 3. Admin Panel: Master Comparative Table [cite: 1, 2]
 async function loadAdminPanel() {
     const tableBody = document.getElementById('admin-table-body');
     const tableHeader = document.getElementById('admin-table-header');
-    if (!tableBody) return;
-
-    tableHeader.innerHTML = `<th>Devotee</th><th>Position</th><th>Chanting (Exact)</th><th>Weekly Avg %</th>`;
-    tableBody.innerHTML = "<tr><td colspan='4'>Crunching Numbers...</td></tr>";
-
+    tableHeader.innerHTML = `<th>Devotee</th><th>Position</th><th>Chanting</th><th>Weekly Avg %</th>`;
     const usersSnap = await db.collection('users').get();
-    const weekInfo = getWeekRange(new Date()); // Current Week Sunday-Saturday
+    const week = getWeekRange(new Date());
     let rows = "";
-
     for (const uDoc of usersSnap.docs) {
         const u = uDoc.data();
-        const sadhanaSnap = await db.collection('users').doc(uDoc.id).collection('sadhana')
-            .where(firebase.firestore.FieldPath.documentId(), ">=", weekInfo.key)
-            .get();
-        
+        const sSnap = await db.collection('users').doc(uDoc.id).collection('sadhana')
+            .where(firebase.firestore.FieldPath.documentId(), ">=", week.key).get();
         let weekTotal = 0;
-        sadhanaSnap.forEach(s => {
-            // Only count if within the Saturday limit of the current week
-            if(s.id <= getWeekRange(new Date()).end) weekTotal += (s.data().totalScore || 0);
-        });
-
-        const weeklyPercent = Math.round((weekTotal / 1120) * 100); // 
-        const scoreClass = weeklyPercent < 40 ? 'score-negative' : '';
-
-        rows += `
-            <tr>
-                <td>${u.displayName || 'Devotee'}</td>
-                <td style="font-size:0.85em;">${u.level || '---'}</td>
-                <td>${u.chantingCategory || '---'} (${u.exactRounds || 0})</td>
-                <td class="${scoreClass}">${weeklyPercent}%</td>
-            </tr>
-        `;
+        sSnap.forEach(s => { if(s.id <= week.end) weekTotal += (s.data().totalScore || 0); });
+        const avg = Math.round((weekTotal / 1120) * 100);
+        rows += `<tr><td>${u.displayName}</td><td>${u.level}</td><td>${u.exactRounds}</td><td>${avg}%</td></tr>`;
     }
     tableBody.innerHTML = rows;
 }
+
+// ==========================================
+// UTILITIES
+// ==========================================
+window.switchTab = (id) => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector(`[onclick="switchTab('${id}')"]`)?.classList.add('active');
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+    document.getElementById(id + '-tab')?.classList.remove('hidden');
+    if (id === 'reports') loadMyReports();
+    if (id === 'admin') loadAdminPanel();
+};
+
+function showSection(id) {
+    document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
+    document.getElementById(id)?.classList.remove('hidden');
+}
+
+window.logout = () => { auth.signOut().then(() => location.reload()); };
