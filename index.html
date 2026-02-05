@@ -32,11 +32,15 @@
                 <h2>User Profile Setup</h2>
                 <div class="form-group">
                     <label>Full Name</label>
-                    <input type="text" id="profile-name" required>
+                    <input type="text" id="displayName" required>
+                </div>
+                <div class="form-group">
+                    <label>Devotee ID (Admin01 for Admin)</label>
+                    <input type="text" id="devoteeId" required>
                 </div>
                 <div class="form-group">
                     <label>Level</label>
-                    <select id="profile-level" required>
+                    <select id="level" required>
                         <option value="Senior Batch">Senior Batch (Level 1)</option>
                         <option value="IGF Coordinator">IGF Coordinator (Level 2)</option>
                         <option value="IYF Overall Coordinator">IYF Overall Coordinator (Level 3)</option>
@@ -44,7 +48,7 @@
                 </div>
                 <div class="form-group">
                     <label>Chanting Category</label>
-                    <select id="profile-chanting" required>
+                    <select id="chantingCategory" required>
                         <option value="Level 1 (1-4 Rounds)">Level 1 (1-4 Rounds)</option>
                         <option value="Level 2 (5-8 Rounds)">Level 2 (5-8 Rounds)</option>
                         <option value="Level 3 (9-15 Rounds)">Level 3 (9-15 Rounds)</option>
@@ -53,11 +57,11 @@
                 </div>
                 <div class="form-group">
                     <label>Exact Rounds</label>
-                    <input type="number" id="profile-exact-rounds" required>
+                    <input type="number" id="exactRounds" required>
                 </div>
                 <div style="display:flex; gap:10px;">
                     <button type="submit">Save Profile</button>
-                    <button type="button" id="cancel-edit" class="hidden" onclick="showSection('dashboard')" style="background:#95a5a6">Cancel</button>
+                    <button type="button" id="profile-cancel-btn" class="hidden" onclick="cancelProfileEdit()" style="background:#95a5a6">Cancel</button>
                 </div>
             </form>
         </section>
@@ -69,7 +73,7 @@
                         <h3 id="user-display-name" style="margin:0; color:var(--primary)"></h3>
                         <a href="javascript:void(0)" onclick="openProfileEdit()" style="font-size:0.85em; color:var(--primary); text-decoration:underline;">Edit Profile Settings</a>
                     </div>
-                    <button id="logout-btn" style="width:auto; padding:8px 15px; background:var(--danger)">Logout</button>
+                    <button onclick="logout()" style="width:auto; padding:8px 15px; background:var(--danger); margin-top:0;">Logout</button>
                 </div>
             </header>
 
@@ -98,7 +102,7 @@
                     </div>
 
                     <div class="form-group"><label>Day Sleep (Mins)</label><input type="number" id="daysleep-mins" value="0"></div>
-                    <button type="submit" id="submit-btn" style="background:var(--success)">Submit Sadhana</button>
+                    <button type="submit" style="background:var(--success)">Submit Sadhana</button>
                 </form>
             </div>
 
@@ -107,14 +111,13 @@
             </div>
 
             <div id="admin-tab" class="tab-content hidden container">
-                <button onclick="downloadMasterReport()" style="background:var(--success); margin-bottom:20px;">Download Master Comparative Excel</button>
+                <button onclick="downloadMasterReport()" style="background:var(--success); margin-bottom:20px;">Download Excel Report</button>
                 <div class="card" style="overflow-x:auto">
-                    <table id="admin-comparative-table" style="width:100%; border-collapse:collapse;">
+                    <table style="width:100%; border-collapse:collapse;">
                         <thead><tr id="admin-table-header"></tr></thead>
                         <tbody id="admin-table-body"></tbody>
                     </table>
                 </div>
-                <div id="admin-users-list" style="margin-top:20px"></div>
             </div>
         </section>
     </div>
