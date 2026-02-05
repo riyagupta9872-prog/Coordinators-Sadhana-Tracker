@@ -1,5 +1,5 @@
 // ==========================================
-// 1. INITIALIZATION & GLOBAL SCOPE
+// 1. CONFIG & INIT
 // ==========================================
 const firebaseConfig = {
     apiKey: "AIzaSyDbRy8ZMJAWeTyZVnTphwRIei6jAckagjA",
@@ -16,7 +16,7 @@ const auth = firebase.auth(), db = firebase.firestore();
 let currentUser = null, userProfile = null;
 
 // ==========================================
-// 2. AUTH & STATE OBSERVER
+// 2. IDENTITY & STATE
 // ==========================================
 auth.onAuthStateChanged(async (user) => {
     if (user) {
@@ -24,18 +24,13 @@ auth.onAuthStateChanged(async (user) => {
         const doc = await db.collection('users').doc(user.uid).get();
         if (doc.exists) {
             userProfile = doc.data();
-            userProfile.isAdmin = userProfile.devoteeId === "Admin01";
-            
-            // Header updates
-            if(document.getElementById('user-display-name')) 
-                document.getElementById('user-display-name').innerText = userProfile.displayName;
-            
-            // UI Toggle based on Position
-            const notesField = document.getElementById('notes-revision-field');
-            if (userProfile.level === "Senior Batch" && notesField) notesField.classList.remove('hidden');
-            
+            userProfile.isAdmin = (userProfile.devoteeId === "Admin01");
+
+            document.getElementById('user-display-name').innerText = userProfile.displayName;
+            if (userProfile.level === "Senior Batch") document.getElementById('notes-revision-field')?.classList.remove('hidden');
             if (userProfile.isAdmin) document.getElementById('admin-tab-btn')?.classList.remove('hidden');
 
+            populateDateDropdown();
             showSection('dashboard-section');
             switchTab('sadhana');
         } else {
@@ -47,7 +42,7 @@ auth.onAuthStateChanged(async (user) => {
     }
 });
 
-// Login Handler
+// LOGIN / REGISTER
 document.getElementById('login-form').onsubmit = async (e) => {
     e.preventDefault();
     const email = document.getElementById('login-email').value;
@@ -57,33 +52,37 @@ document.getElementById('login-form').onsubmit = async (e) => {
     } catch (err) {
         if (err.code === 'auth/user-not-found') {
             await auth.createUserWithEmailAndPassword(email, password);
+            alert("Account Created! Please set up your profile.");
         } else { alert(err.message); }
     }
 };
 
 // ==========================================
-// 3. PROFILE LOGIC (Fixing openProfileEdit)
+// 3. PROFILE MANAGEMENT (IDs Matched)
 // ==========================================
 window.openProfileEdit = () => {
     if(userProfile) {
-        document.getElementById('display-name').value = userProfile.displayName || "";
-        document.getElementById('devotee-id').value = userProfile.devoteeId || "";
-        document.getElementById('user-level').value = userProfile.level || "Others";
-        document.getElementById('chanting-category').value = userProfile.chantingCategory || "0-4 Rounds";
-        document.getElementById('exact-rounds').value = userProfile.exactRounds || "0";
+        document.getElementById('displayName').value = userProfile.displayName || "";
+        document.getElementById('devoteeId').value = userProfile.devoteeId || "";
+        document.getElementById('level').value = userProfile.level || "Others";
+        document.getElementById('chantingCategory').value = userProfile.chantingCategory || "";
+        document.getElementById('exactRounds').value = userProfile.exactRounds || "0";
     }
     showSection('profile-section');
     document.getElementById('profile-cancel-btn')?.classList.remove('hidden');
 };
 
+window.cancelProfileEdit = () => showSection('dashboard-section');
+
 document.getElementById('profile-form').onsubmit = async (e) => {
     e.preventDefault();
     const data = {
-        displayName: document.getElementById('display-name').value,
-        devoteeId: document.getElementById('devotee-id').value,
-        level: document.getElementById('user-level').value,
-        chantingCategory: document.getElementById('chanting-category').value,
-        exactRounds: document.getElementById('exact-rounds').value
+        displayName: document.getElementById('displayName').value,
+        devoteeId: document.getElementById('devoteeId').value,
+        level: document.getElementById('level').value,
+        chantingCategory: document.getElementById('chantingCategory').value,
+        exactRounds: document.getElementById('exactRounds').value,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     };
     await db.collection('users').doc(currentUser.uid).set(data, {merge: true});
     alert("Profile Saved!");
@@ -91,7 +90,7 @@ document.getElementById('profile-form').onsubmit = async (e) => {
 };
 
 // ==========================================
-// 4. SCORING ENGINE & SUBMISSION
+// 4. SCORING ENGINE (The 160 Points Logic)
 // ==========================================
 const t2m = (t, isS = false) => {
     if (!t) return 9999;
@@ -103,8 +102,7 @@ const t2m = (t, isS = false) => {
 document.getElementById('sadhana-form').onsubmit = async (e) => {
     e.preventDefault();
     const dateId = document.getElementById('sadhana-date').value;
-    if(!dateId) return alert("Select Date!");
-
+    
     const d = {
         sleepTime: document.getElementById('sleep-time').value,
         wakeupTime: document.getElementById('wakeup-time').value,
@@ -116,7 +114,7 @@ document.getElementById('sadhana-form').onsubmit = async (e) => {
         daySleepMinutes: parseInt(document.getElementById('daysleep-mins').value) || 0
     };
 
-    // Calculation Logic
+    // Calculate Scores
     const slpM = t2m(d.sleepTime, true), wakM = t2m(d.wakeupTime, false), chnM = t2m(d.chantingTime, false);
     let s = { sleep: -5, wakeup: -5, chanting: -5, reading: -5, hearing: -5, service: -5, notes: -5, daySleep: 0 };
 
@@ -134,22 +132,31 @@ document.getElementById('sadhana-form').onsubmit = async (e) => {
     if (userProfile.level === "Senior Batch") {
         s.service = d.serviceMinutes >= 15 ? 10 : -5;
         s.notes = d.notesMinutes >= 20 ? 15 : -5;
-    } else {
-        s.service = getActSc(d.serviceMinutes, 30);
-    }
+    } else { s.service = getActSc(d.serviceMinutes, 30); }
 
     const total = Object.values(s).reduce((a, b) => a + b, 0);
+    
     await db.collection('users').doc(currentUser.uid).collection('sadhana').doc(dateId).set({
         ...d, totalScore: total, dayPercent: Math.round((total/160)*100)
     }, {merge: true});
     
-    alert("Submitted!");
+    alert("Sadhana Submitted!");
     switchTab('reports');
 };
 
 // ==========================================
-// 5. NAVIGATION & UTILS
+// 5. UTILS & NAVIGATION
 // ==========================================
+function populateDateDropdown() {
+    const sel = document.getElementById('sadhana-date');
+    const today = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(today.getDate() - 1);
+    
+    const dates = [today.toISOString().split('T')[0], yesterday.toISOString().split('T')[0]];
+    sel.innerHTML = dates.map(d => `<option value="${d}">${d}</option>`).join('');
+}
+
 window.switchTab = (id) => {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     document.querySelector(`[onclick="switchTab('${id}')"]`)?.classList.add('active');
@@ -166,24 +173,29 @@ function showSection(id) {
 
 window.logout = () => auth.signOut().then(() => location.reload());
 
-// Reports and Admin logic (Simplified for speed)
+// Reports logic (Collapsible Weeks)
 async function loadMyReports() {
     const container = document.getElementById('weekly-reports-container');
-    const snap = await db.collection('users').doc(currentUser.uid).collection('sadhana').get();
-    let html = `<h3>My Reports</h3>`;
+    const snap = await db.collection('users').doc(currentUser.uid).collection('sadhana').orderBy(firebase.firestore.FieldPath.documentId(), "desc").get();
+    let html = `<h3>My History</h3>`;
     snap.forEach(doc => {
         const d = doc.data();
-        html += `<div class="card">${doc.id}: ${d.totalScore}/160 (${d.dayPercent}%)</div>`;
+        html += `<div class="card" style="margin-bottom:10px; padding:10px;">${doc.id}: <b>${d.totalScore}/160</b> (${d.dayPercent}%)</div>`;
     });
     container.innerHTML = html;
 }
 
+// Admin Logic
 async function loadAdminPanel() {
-    const body = document.getElementById('admin-table-body');
+    const tableHeader = document.getElementById('admin-table-header');
+    const tableBody = document.getElementById('admin-table-body');
+    tableHeader.innerHTML = `<th>Name</th><th>Position</th><th>Rounds</th><th>Total Score</th>`;
+    
     const users = await db.collection('users').get();
     let rows = "";
-    for(const u of users.docs) {
-        rows += `<tr><td>${u.data().displayName}</td><td>${u.data().level}</td><td>${u.data().exactRounds}</td><td>-</td></tr>`;
+    for(const uDoc of users.docs) {
+        const u = uDoc.data();
+        rows += `<tr><td>${u.displayName}</td><td>${u.level}</td><td>${u.exactRounds}</td><td>-</td></tr>`;
     }
-    body.innerHTML = rows;
+    tableBody.innerHTML = rows;
 }
