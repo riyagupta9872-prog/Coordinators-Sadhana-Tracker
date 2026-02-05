@@ -1,68 +1,126 @@
 // ==========================================
-// SECTION 1 & 2: PEHCHAAN AUR PROFILE UPDATE
+// SECTION 1: AUTHENTICATION (Login & Register)
 // ==========================================
 
-// 1. Initial Connection
-const firebaseConfig = {
-    apiKey: "AIzaSyDbRy8ZMJAWeTyZVnTphwRIei6jAckagjA",
-    authDomain: "sadhana-tracker-b65ff.firebaseapp.com",
-    projectId: "sadhana-tracker-b65ff",
-    storageBucket: "sadhana-tracker-b65ff.firebasestorage.app",
-    messagingSenderId: "926961218888",
-    appId: "1:926961218888:web:db8f12ef8256d13f036f7d"
+// 1.1 Form Submission Logic (Login/Signup)
+document.getElementById('login-form').onsubmit = async (e) => {
+    e.preventDefault();
+    const email = document.getElementById('login-email').value;
+    const password = document.getElementById('login-password').value;
+    const btn = e.target.querySelector('button');
+
+    try {
+        btn.innerText = "Processing...";
+        btn.disabled = true;
+
+        // Try Login
+        try {
+            await auth.signInWithEmailAndPassword(email, password);
+            console.log("Login Successful");
+        } catch (err) {
+            // Agar user nahi mila toh automatic Register kar do (As per your flow)
+            if (err.code === 'auth/user-not-found') {
+                await auth.createUserWithEmailAndPassword(email, password);
+                alert("Account Created Successfully!");
+            } else {
+                throw err;
+            }
+        }
+    } catch (error) {
+        console.error("Auth Error:", error);
+        alert("Error: " + error.message);
+    } finally {
+        btn.innerText = "Login / Register";
+        btn.disabled = false;
+    }
 };
 
-firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth(), db = firebase.firestore();
+// 1.2 Profile Section Handler (New Users)
+document.getElementById('profile-form').onsubmit = async (e) => {
+    e.preventDefault();
+    
+    const profileData = {
+        displayName: document.getElementById('display-name').value,
+        devoteeId: document.getElementById('devotee-id').value,
+        level: document.getElementById('user-level').value, // Senior Batch or Others
+        chantingCategory: document.getElementById('chanting-category').value,
+        exactRounds: document.getElementById('exact-rounds').value,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
 
-let currentUser = null;
-let userProfile = null;
+    if (!profileData.displayName || !profileData.devoteeId) {
+        alert("Please fill all mandatory fields.");
+        return;
+    }
 
-// 2. Login aur Pehchaan Logic (Handle New/Old Users)
+    try {
+        await db.collection('users').doc(currentUser.uid).set(profileData);
+        alert("Profile Setup Complete!");
+        location.reload(); // Refresh to load dashboard
+    } catch (error) {
+        console.error("Profile Save Error:", error);
+        alert("Error saving profile: " + error.message);
+    }
+};
+
+// ==========================================
+// SECTION 2: IDENTITY & STATE (onAuthStateChanged)
+// ==========================================
+
 auth.onAuthStateChanged(async (user) => {
     if (user) {
         currentUser = user;
+        console.log("User detected:", user.email);
+        
         const doc = await db.collection('users').doc(user.uid).get();
         
         if (doc.exists) {
             const data = doc.data();
             userProfile = {
-                displayName: data.displayName || "",
+                displayName: data.displayName || "Devotee",
                 level: (data.level || "").trim(),
                 chantingCategory: data.chantingCategory || "",
                 exactRounds: data.exactRounds || "",
                 isAdmin: data.devoteeId === "Admin01"
             };
 
-            // Header mein naam dikhana
+            // UI Updates
             if(document.getElementById('user-display-name')) {
                 document.getElementById('user-display-name').innerText = userProfile.displayName;
             }
             
-            // PRD: Senior Batch check for "Notes Revision" field
+            // Toggle Senior Fields
             const notesField = document.getElementById('notes-revision-field');
             if (userProfile.level === "Senior Batch" && notesField) {
                 notesField.classList.remove('hidden');
             }
 
-            // PRD: Admin Tab check
+            // Toggle Admin Tab
             const adminTab = document.getElementById('admin-tab-btn');
             if (userProfile.isAdmin && adminTab) {
                 adminTab.classList.remove('hidden');
             }
 
             showSection('dashboard-section'); 
-            if(window.switchTab) window.switchTab('form'); 
+            switchTab('sadhana'); // PRD: Default tab for existing users
         } else {
-            // Naya User: Seedha Profile setup par bhejo
+            // Naya User: Profile Setup Section dikhao
             showSection('profile-section');
-            document.getElementById('profile-cancel-btn')?.classList.add('hidden'); // New user cancel nahi kar sakta
+            if(document.getElementById('profile-cancel-btn')) {
+                document.getElementById('profile-cancel-btn').classList.add('hidden');
+            }
         }
     } else {
+        // Logged Out
         showSection('auth-section');
     }
 });
 
+// Utility to switch main sections
+function showSection(id) {
+    document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
+    document.getElementById(id)?.classList.remove('hidden');
+}
 // 3. Profile Save aur Update Button
 document.getElementById('profile-form').onsubmit = async (e) => {
     e.preventDefault();
