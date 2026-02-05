@@ -48,18 +48,31 @@ window.downloadUserExcel = async (userId, userName) => {
             return;
         }
 
-        const snap = await db.collection('users').doc(userId).collection('sadhana').orderBy('submittedAt', 'asc').get();
+        const snap = await db.collection('users').doc(userId).collection('sadhana').orderBy('submittedAt', 'desc').get();
         if (snap.empty) {
             alert("No data found to download.");
             return;
         }
 
-        const dataArray = [["Date", "Bed", "M", "Wake", "M", "Chant", "M", "Read(m)", "M", "Hear(m)", "M", "Seva(m)", "M", "Notes(m)", "M", "Day Sleep", "DS M", "Total", "%"]];
+        const dataArray = [["Date", "Bed", "M", "Wake", "M", "Chant", "M", "Read(m)", "M", "Hear(m)", "M", "Seva(m)", "M", "Notes(m)", "M", "Day Sleep(m)", "M", "Total", "%"]];
         
+        // Sort by date descending (latest first)
+        const entries = [];
         snap.forEach(doc => {
             const e = doc.data();
+            entries.push({
+                date: doc.id,
+                data: e
+            });
+        });
+        
+        // Sort by date (latest first)
+        entries.sort((a, b) => b.date.localeCompare(a.date));
+        
+        entries.forEach(entry => {
+            const e = entry.data;
             dataArray.push([
-                doc.id, e.sleepTime || "NR", e.scores?.sleep ?? 0, 
+                entry.date, e.sleepTime || "NR", e.scores?.sleep ?? 0, 
                 e.wakeupTime || "NR", e.scores?.wakeup ?? 0, 
                 e.chantingTime || "NR", e.scores?.chanting ?? 0, 
                 e.readingMinutes || 0, e.scores?.reading ?? 0, 
@@ -86,34 +99,63 @@ window.downloadUserExcel = async (userId, userName) => {
 
 window.downloadMasterReport = async () => {
     try {
-        const weeks = [];
-        for (let i = 0; i < 4; i++) {
-            const d = new Date(); d.setDate(d.getDate() - (i*7));
-            weeks.push(getWeekInfo(d.toISOString().split('T')[0]));
-        }
-        weeks.reverse();
         const usersSnap = await db.collection('users').get();
-        const rows = [["User Name", "Position Level", "Chanting Category", ...weeks.map(w => w.label + " (%)")]];
+        
+        // Get all unique weeks from all users
+        const allWeeksSet = new Set();
+        const userData = [];
         
         for (const uDoc of usersSnap.docs) {
             const u = uDoc.data();
             const sSnap = await uDoc.ref.collection('sadhana').get();
             const sEntries = sSnap.docs.map(d => ({ date: d.id, score: d.data().totalScore || 0 }));
-            const userRow = [u.name, u.level || 'Senior Batch', u.chantingCategory || 'Level-1'];
-            const weeklyMax = 1120; // All positions have same max now
-
-            weeks.forEach(w => {
-                let weekTotal = 0; let curr = new Date(w.sunStr);
+            
+            // Find all weeks for this user
+            sEntries.forEach(entry => {
+                const week = getWeekInfo(entry.date);
+                allWeeksSet.add(week.label);
+            });
+            
+            userData.push({ user: u, entries: sEntries });
+        }
+        
+        // Convert to array and sort (latest first)
+        const allWeeks = Array.from(allWeeksSet).sort((a, b) => b.localeCompare(a));
+        
+        const rows = [["User Name", "Position Level", "Chanting Category", ...allWeeks.map(w => w + " (%)")]];
+        
+        // Calculate weekly percentages for each user
+        userData.forEach(({ user, entries }) => {
+            const userRow = [user.name, user.level || 'Senior Batch', user.chantingCategory || 'Level-1'];
+            const weeklyMax = 1120;
+            
+            allWeeks.forEach(weekLabel => {
+                // Find the Sunday of this week
+                const weekParts = weekLabel.split('_');
+                const year = weekParts[1];
+                const dateParts = weekLabel.split(' to ')[0].split(' ');
+                const day = parseInt(dateParts[0]);
+                const monthStr = dateParts[1];
+                
+                // Create date from week label
+                const monthMap = { 'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5, 'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11 };
+                const weekStart = new Date(parseInt(year), monthMap[monthStr], day);
+                
+                let weekTotal = 0;
                 for (let i = 0; i < 7; i++) {
+                    const curr = new Date(weekStart);
+                    curr.setDate(curr.getDate() + i);
                     const ds = curr.toISOString().split('T')[0];
-                    const entry = sEntries.find(e => e.date === ds);
+                    const entry = entries.find(e => e.date === ds);
                     weekTotal += entry ? entry.score : -35;
-                    curr.setDate(curr.getDate() + 1);
                 }
+                
                 userRow.push(Math.round((weekTotal / weeklyMax) * 100) + "%");
             });
+            
             rows.push(userRow);
-        }
+        });
+        
         const ws = XLSX.utils.aoa_to_sheet(rows);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "Master_Report");
@@ -169,6 +211,7 @@ function loadReports(userId, containerId) {
             weeks[week.label].total += data.totalScore || 0;
         });
         
+        // Only add NR for latest 4 weeks
         const today = new Date();
         for (let i = 0; i < 28; i++) {
             const d = new Date(today); d.setDate(d.getDate() - i);
@@ -182,25 +225,32 @@ function loadReports(userId, containerId) {
                 weeks[week.label].total += nrData.totalScore;
             }
         }
+        
         container.innerHTML = '';
-        Object.keys(weeks).sort((a,b) => b.localeCompare(a)).forEach(key => {
+        
+        // Get latest 4 weeks only, sorted with current week on top
+        const sortedWeeks = Object.keys(weeks).sort((a,b) => b.localeCompare(a)).slice(0, 4);
+        
+        sortedWeeks.forEach(key => {
             const week = weeks[key];
             const div = document.createElement('div');
             div.className = 'week-card';
             div.innerHTML = `<div class="week-header" onclick="this.nextElementSibling.classList.toggle('hidden')"><span>📅 ${week.range}</span><strong>Score: ${week.total} ▼</strong></div>
                 <div class="week-content hidden" style="overflow-x:auto;"><table class="admin-table">
-                <thead><tr><th>Date</th><th>Bed</th><th>M</th><th>Wake</th><th>M</th><th>Chant</th><th>M</th><th>Read</th><th>M</th><th>Hear</th><th>M</th><th>Seva</th><th>M</th><th>Notes</th><th>M</th><th>Total</th><th>%</th></tr></thead>
+                <thead><tr><th>Date</th><th>Bed</th><th>M</th><th>Wake</th><th>M</th><th>Chant</th><th>M</th><th>Read</th><th>M</th><th>Hear</th><th>M</th><th>Seva</th><th>M</th><th>Notes</th><th>M</th><th>Day Sleep</th><th>M</th><th>Total</th><th>%</th></tr></thead>
                 <tbody>${week.data.sort((a,b) => b.id.localeCompare(a.id)).map(e => {
                     const rowStyle = e.sleepTime === 'NR' ? 'style="background:#fff5f5; color:red;"' : '';
+                    const getColorStyle = (val) => val < 0 ? 'style="color:red; font-weight:bold;"' : '';
                     return `<tr ${rowStyle}><td>${e.id.split('-').slice(1).join('/')}</td>
-                        <td>${e.sleepTime}</td><td>${e.scores?.sleep ?? 0}</td>
-                        <td>${e.wakeupTime}</td><td>${e.scores?.wakeup ?? 0}</td>
-                        <td>${e.chantingTime}</td><td>${e.scores?.chanting ?? 0}</td>
-                        <td>${e.readingMinutes || 0}m</td><td>${e.scores?.reading ?? 0}</td>
-                        <td>${e.hearingMinutes || 0}m</td><td>${e.scores?.hearing ?? 0}</td>
-                        <td>${e.serviceMinutes || 0}m</td><td>${e.scores?.service ?? 0}</td>
-                        <td>${e.notesMinutes || 0}m</td><td>${e.scores?.notes ?? 0}</td>
-                        <td>${e.totalScore ?? 0}</td><td>${e.dayPercent ?? 0}%</td></tr>`;
+                        <td>${e.sleepTime}</td><td ${getColorStyle(e.scores?.sleep ?? 0)}>${e.scores?.sleep ?? 0}</td>
+                        <td>${e.wakeupTime}</td><td ${getColorStyle(e.scores?.wakeup ?? 0)}>${e.scores?.wakeup ?? 0}</td>
+                        <td>${e.chantingTime}</td><td ${getColorStyle(e.scores?.chanting ?? 0)}>${e.scores?.chanting ?? 0}</td>
+                        <td>${e.readingMinutes || 0}m</td><td ${getColorStyle(e.scores?.reading ?? 0)}>${e.scores?.reading ?? 0}</td>
+                        <td>${e.hearingMinutes || 0}m</td><td ${getColorStyle(e.scores?.hearing ?? 0)}>${e.scores?.hearing ?? 0}</td>
+                        <td>${e.serviceMinutes || 0}m</td><td ${getColorStyle(e.scores?.service ?? 0)}>${e.scores?.service ?? 0}</td>
+                        <td>${e.notesMinutes || 0}m</td><td ${getColorStyle(e.scores?.notes ?? 0)}>${e.scores?.notes ?? 0}</td>
+                        <td>${e.daySleepMinutes || 0}m</td><td ${getColorStyle(e.scores?.daySleep ?? 0)}>${e.scores?.daySleep ?? 0}</td>
+                        <td ${getColorStyle(e.totalScore ?? 0)}>${e.totalScore ?? 0}</td><td>${e.dayPercent ?? 0}%</td></tr>`;
                 }).join('')}</tbody></table></div>`;
             container.appendChild(div);
         });
@@ -215,10 +265,10 @@ document.getElementById('sadhana-form').onsubmit = async (e) => {
     const slp = document.getElementById('sleep-time').value;
     const wak = document.getElementById('wakeup-time').value;
     const chn = document.getElementById('chanting-time').value;
-    const rMin = (parseInt(document.getElementById('reading-hrs').value) || 0) * 60 + (parseInt(document.getElementById('reading-mins').value) || 0);
-    const hMin = (parseInt(document.getElementById('hearing-hrs').value) || 0) * 60 + (parseInt(document.getElementById('hearing-mins').value) || 0);
-    const sMin = (parseInt(document.getElementById('service-hrs')?.value) || 0) * 60 + (parseInt(document.getElementById('service-mins')?.value) || 0);
-    const nMin = (parseInt(document.getElementById('notes-hrs')?.value) || 0) * 60 + (parseInt(document.getElementById('notes-mins')?.value) || 0);
+    const rMin = parseInt(document.getElementById('reading-mins').value) || 0;
+    const hMin = parseInt(document.getElementById('hearing-mins').value) || 0;
+    const sMin = parseInt(document.getElementById('service-mins')?.value) || 0;
+    const nMin = parseInt(document.getElementById('notes-mins')?.value) || 0;
     const dsMin = parseInt(document.getElementById('day-sleep-minutes').value) || 0;
 
     const sc = { sleep: -5, wakeup: -5, chanting: -5, reading: -5, hearing: -5, service: -5, notes: -5, daySleep: 0 };
