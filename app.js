@@ -203,7 +203,17 @@ function loadReports(userId, containerId) {
     if (activeListener) activeListener();
     activeListener = db.collection('users').doc(userId).collection('sadhana').onSnapshot(snap => {
         const weeks = {};
+        const today = new Date();
+        
+        // ONLY process last 28 days (4 weeks from today)
+        const cutoffDate = new Date(today);
+        cutoffDate.setDate(cutoffDate.getDate() - 27); // 28 days including today
+        const cutoffStr = cutoffDate.toISOString().split('T')[0];
+        
         snap.forEach(doc => {
+            // Skip old data - only take last 28 days
+            if (doc.id < cutoffStr) return;
+            
             const data = doc.data();
             const week = getWeekInfo(doc.id);
             if (!weeks[week.label]) weeks[week.label] = { range: week.label, data: [], total: 0 };
@@ -211,10 +221,10 @@ function loadReports(userId, containerId) {
             weeks[week.label].total += data.totalScore || 0;
         });
         
-        // Only add NR for latest 4 weeks
-        const today = new Date();
+        // Only add NR for current 4 weeks (last 28 days)
         for (let i = 0; i < 28; i++) {
-            const d = new Date(today); d.setDate(d.getDate() - i);
+            const d = new Date(today); 
+            d.setDate(d.getDate() - i);
             const dateStr = d.toISOString().split('T')[0];
             const week = getWeekInfo(dateStr);
             if (!weeks[week.label]) weeks[week.label] = { range: week.label, data: [], total: 0 };
@@ -228,8 +238,8 @@ function loadReports(userId, containerId) {
         
         container.innerHTML = '';
         
-        // Get latest 4 weeks only, sorted with current week on top
-        const sortedWeeks = Object.keys(weeks).sort((a,b) => b.localeCompare(a)).slice(0, 4);
+        // Sort weeks - current week on top (latest first)
+        const sortedWeeks = Object.keys(weeks).sort((a,b) => b.localeCompare(a));
         
         sortedWeeks.forEach(key => {
             const week = weeks[key];
