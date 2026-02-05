@@ -203,43 +203,56 @@ function loadReports(userId, containerId) {
     if (activeListener) activeListener();
     activeListener = db.collection('users').doc(userId).collection('sadhana').onSnapshot(snap => {
         const weeks = {};
-        const today = new Date();
         
-        // ONLY process last 28 days (4 weeks from today)
-        const cutoffDate = new Date(today);
-        cutoffDate.setDate(cutoffDate.getDate() - 27); // 28 days including today
-        const cutoffStr = cutoffDate.toISOString().split('T')[0];
+        // Get exactly 4 weeks from today
+        const weeksList = [];
+        for (let weekNum = 0; weekNum < 4; weekNum++) {
+            const d = new Date();
+            d.setDate(d.getDate() - (weekNum * 7)); // Go back by weeks
+            const weekInfo = getWeekInfo(d.toISOString().split('T')[0]);
+            weeksList.push(weekInfo);
+        }
         
-        snap.forEach(doc => {
-            // Skip old data - only take last 28 days
-            if (doc.id < cutoffStr) return;
-            
-            const data = doc.data();
-            const week = getWeekInfo(doc.id);
-            if (!weeks[week.label]) weeks[week.label] = { range: week.label, data: [], total: 0 };
-            weeks[week.label].data.push({ id: doc.id, ...data });
-            weeks[week.label].total += data.totalScore || 0;
+        // Initialize weeks
+        weeksList.forEach(w => {
+            weeks[w.label] = { range: w.label, sunStr: w.sunStr, data: [], total: 0 };
         });
         
-        // Only add NR for current 4 weeks (last 28 days)
-        for (let i = 0; i < 28; i++) {
-            const d = new Date(today); 
-            d.setDate(d.getDate() - i);
-            const dateStr = d.toISOString().split('T')[0];
-            const week = getWeekInfo(dateStr);
-            if (!weeks[week.label]) weeks[week.label] = { range: week.label, data: [], total: 0 };
-            const exists = weeks[week.label].data.find(e => e.id === dateStr);
-            if (!exists) {
-                const nrData = getNRData(dateStr);
-                weeks[week.label].data.push(nrData);
-                weeks[week.label].total += nrData.totalScore;
+        // Process existing sadhana data
+        snap.forEach(doc => {
+            const data = doc.data();
+            const week = getWeekInfo(doc.id);
+            
+            // Only include if this week is in our 4 weeks list
+            if (weeks[week.label]) {
+                weeks[week.label].data.push({ id: doc.id, ...data });
+                weeks[week.label].total += data.totalScore || 0;
             }
-        }
+        });
+        
+        // Add NR for missing dates in these 4 weeks only
+        weeksList.forEach(weekInfo => {
+            const week = weeks[weekInfo.label];
+            let curr = new Date(weekInfo.sunStr);
+            
+            for (let i = 0; i < 7; i++) {
+                const dateStr = curr.toISOString().split('T')[0];
+                const exists = week.data.find(e => e.id === dateStr);
+                
+                if (!exists) {
+                    const nrData = getNRData(dateStr);
+                    week.data.push(nrData);
+                    week.total += nrData.totalScore;
+                }
+                
+                curr.setDate(curr.getDate() + 1);
+            }
+        });
         
         container.innerHTML = '';
         
         // Sort weeks - current week on top (latest first)
-        const sortedWeeks = Object.keys(weeks).sort((a,b) => b.localeCompare(a));
+        const sortedWeeks = weeksList.map(w => w.label).sort((a,b) => b.localeCompare(a));
         
         sortedWeeks.forEach(key => {
             const week = weeks[key];
