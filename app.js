@@ -251,11 +251,10 @@ function loadReports(userId, containerId) {
         
         container.innerHTML = '';
         
-        // Sort weeks - current week on top (latest first)
-        const sortedWeeks = weeksList.map(w => w.label).sort((a,b) => b.localeCompare(a));
-        
-        sortedWeeks.forEach(key => {
-            const week = weeks[key];
+        // Display weeks in order - current week (Week 0) first, then Week 1, 2, 3
+        // weeksList is already in correct order (0, 1, 2, 3)
+        weeksList.forEach(weekInfo => {
+            const week = weeks[weekInfo.label];
             const div = document.createElement('div');
             div.className = 'week-card';
             div.innerHTML = `<div class="week-header" onclick="this.nextElementSibling.classList.toggle('hidden')"><span>📅 ${week.range}</span><strong>Score: ${week.total} ▼</strong></div>
