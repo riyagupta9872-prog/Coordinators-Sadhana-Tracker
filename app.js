@@ -58,23 +58,23 @@ window.downloadUserExcel = async (userId, userName) => {
         const weeksData = {};
         snap.forEach(doc => {
             const weekInfo = getWeekInfo(doc.id);
-            if (!weeksData[weekInfo.label]) {
-                weeksData[weekInfo.label] = { 
+            if (!weeksData[weekInfo.sunStr]) {
+                weeksData[weekInfo.sunStr] = { 
                     label: weekInfo.label, 
                     sunStr: weekInfo.sunStr,
                     days: {} 
                 };
             }
-            weeksData[weekInfo.label].days[doc.id] = doc.data();
+            weeksData[weekInfo.sunStr].days[doc.id] = doc.data();
         });
 
-        // Sort weeks (latest first)
+        // Sort weeks by Sunday date (latest first)
         const sortedWeeks = Object.keys(weeksData).sort((a, b) => b.localeCompare(a));
 
         const dataArray = [];
 
-        sortedWeeks.forEach((weekLabel, weekIndex) => {
-            const week = weeksData[weekLabel];
+        sortedWeeks.forEach((sunStr, weekIndex) => {
+            const week = weeksData[sunStr];
             
             // Week Header Row (merged)
             dataArray.push([`WEEK: ${week.label}`, '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '']);
