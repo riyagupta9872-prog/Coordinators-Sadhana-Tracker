@@ -48,47 +48,175 @@ window.downloadUserExcel = async (userId, userName) => {
             return;
         }
 
-        const snap = await db.collection('users').doc(userId).collection('sadhana').orderBy('submittedAt', 'desc').get();
+        const snap = await db.collection('users').doc(userId).collection('sadhana').get();
         if (snap.empty) {
             alert("No data found to download.");
             return;
         }
 
-        const dataArray = [["Date", "Bed", "M", "Wake", "M", "Chant", "M", "Read(m)", "M", "Hear(m)", "M", "Seva(m)", "M", "Notes(m)", "M", "Day Sleep(m)", "M", "Total", "%"]];
-        
-        // Sort by date descending (latest first)
-        const entries = [];
+        // Organize data by weeks
+        const weeksData = {};
         snap.forEach(doc => {
-            const e = doc.data();
-            entries.push({
-                date: doc.id,
-                data: e
-            });
+            const weekInfo = getWeekInfo(doc.id);
+            if (!weeksData[weekInfo.label]) {
+                weeksData[weekInfo.label] = { 
+                    label: weekInfo.label, 
+                    sunStr: weekInfo.sunStr,
+                    days: {} 
+                };
+            }
+            weeksData[weekInfo.label].days[doc.id] = doc.data();
         });
-        
-        // Sort by date (latest first)
-        entries.sort((a, b) => b.date.localeCompare(a.date));
-        
-        entries.forEach(entry => {
-            const e = entry.data;
+
+        // Sort weeks (latest first)
+        const sortedWeeks = Object.keys(weeksData).sort((a, b) => b.localeCompare(a));
+
+        const dataArray = [];
+
+        sortedWeeks.forEach((weekLabel, weekIndex) => {
+            const week = weeksData[weekLabel];
+            
+            // Week Header Row (merged)
+            dataArray.push([`WEEK: ${week.label}`, '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '']);
+            
+            // Column Headers
             dataArray.push([
-                entry.date, e.sleepTime || "NR", e.scores?.sleep ?? 0, 
-                e.wakeupTime || "NR", e.scores?.wakeup ?? 0, 
-                e.chantingTime || "NR", e.scores?.chanting ?? 0, 
-                e.readingMinutes || 0, e.scores?.reading ?? 0, 
-                e.hearingMinutes || 0, e.scores?.hearing ?? 0, 
-                e.serviceMinutes || 0, e.scores?.service ?? 0, 
-                e.notesMinutes || 0, e.scores?.notes ?? 0, 
-                e.daySleepMinutes || 0, e.scores?.daySleep ?? 0, 
-                e.totalScore ?? 0, (e.dayPercent ?? 0) + "%"
+                'Date', 'Bed', 'M', 'Wake', 'M', 'Chant', 'M', 
+                'Read(m)', 'M', 'Hear(m)', 'M', 'Seva(m)', 'M', 
+                'Notes(m)', 'M', 'Day Sleep(m)', 'M', 'Total', '%'
             ]);
+
+            // Daily rows (Sun to Sat)
+            let weekTotals = {
+                sleepM: 0, wakeupM: 0, chantingM: 0,
+                readingM: 0, hearingM: 0, serviceM: 0, notesM: 0, daySleepM: 0,
+                readingMins: 0, hearingMins: 0, serviceMins: 0, notesMins: 0, daySleepMins: 0,
+                total: 0
+            };
+
+            const weekStart = new Date(week.sunStr);
+            const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+            for (let i = 0; i < 7; i++) {
+                const currentDate = new Date(weekStart);
+                currentDate.setDate(currentDate.getDate() + i);
+                const dateStr = currentDate.toISOString().split('T')[0];
+                const dayNum = currentDate.getDate();
+                const dayLabel = `${dayNames[i]} ${String(dayNum).padStart(2, '0')}`;
+
+                const entry = week.days[dateStr] || getNRData(dateStr);
+
+                // Add to weekly totals
+                weekTotals.sleepM += entry.scores?.sleep ?? 0;
+                weekTotals.wakeupM += entry.scores?.wakeup ?? 0;
+                weekTotals.chantingM += entry.scores?.chanting ?? 0;
+                weekTotals.readingM += entry.scores?.reading ?? 0;
+                weekTotals.hearingM += entry.scores?.hearing ?? 0;
+                weekTotals.serviceM += entry.scores?.service ?? 0;
+                weekTotals.notesM += entry.scores?.notes ?? 0;
+                weekTotals.daySleepM += entry.scores?.daySleep ?? 0;
+                weekTotals.readingMins += entry.readingMinutes || 0;
+                weekTotals.hearingMins += entry.hearingMinutes || 0;
+                weekTotals.serviceMins += entry.serviceMinutes || 0;
+                weekTotals.notesMins += entry.notesMinutes || 0;
+                weekTotals.daySleepMins += entry.daySleepMinutes || 0;
+                weekTotals.total += entry.totalScore ?? 0;
+
+                dataArray.push([
+                    dayLabel,
+                    entry.sleepTime || 'NR',
+                    entry.scores?.sleep ?? 0,
+                    entry.wakeupTime || 'NR',
+                    entry.scores?.wakeup ?? 0,
+                    entry.chantingTime || 'NR',
+                    entry.scores?.chanting ?? 0,
+                    entry.readingMinutes || 0,
+                    entry.scores?.reading ?? 0,
+                    entry.hearingMinutes || 0,
+                    entry.scores?.hearing ?? 0,
+                    entry.serviceMinutes || 0,
+                    entry.scores?.service ?? 0,
+                    entry.notesMinutes || 0,
+                    entry.scores?.notes ?? 0,
+                    entry.daySleepMinutes || 0,
+                    entry.scores?.daySleep ?? 0,
+                    entry.totalScore ?? 0,
+                    (entry.dayPercent ?? 0) + '%'
+                ]);
+            }
+
+            // Weekly Total Row
+            const weekPercent = Math.round((weekTotals.total / 1120) * 100);
+            dataArray.push([
+                'WEEKLY TOTAL',
+                '',
+                weekTotals.sleepM,
+                '',
+                weekTotals.wakeupM,
+                '',
+                weekTotals.chantingM,
+                weekTotals.readingMins,
+                weekTotals.readingM,
+                weekTotals.hearingMins,
+                weekTotals.hearingM,
+                weekTotals.serviceMins,
+                weekTotals.serviceM,
+                weekTotals.notesMins,
+                weekTotals.notesM,
+                weekTotals.daySleepMins,
+                weekTotals.daySleepM,
+                weekTotals.total,
+                weekPercent + '%'
+            ]);
+
+            // Weekly Percentage Summary Row
+            dataArray.push([
+                `WEEKLY PERCENTAGE: ${weekTotals.total} / 1120 = ${weekPercent}%`,
+                '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''
+            ]);
+
+            // Blank rows between weeks
+            if (weekIndex < sortedWeeks.length - 1) {
+                dataArray.push(['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '']);
+                dataArray.push(['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '']);
+            }
         });
 
         const worksheet = XLSX.utils.aoa_to_sheet(dataArray);
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "Sadhana_Sheet");
         
-        const fileName = `${userName.replace(/\s+/g, '_')}_Sadhana.xlsx`;
+        // Apply styling and merges
+        const merges = [];
+        let currentRow = 0;
+        
+        sortedWeeks.forEach((weekLabel, weekIndex) => {
+            // Merge week header (row 0 = week header spanning all columns)
+            merges.push({
+                s: { r: currentRow, c: 0 },
+                e: { r: currentRow, c: 18 }
+            });
+            
+            // Merge weekly percentage row
+            merges.push({
+                s: { r: currentRow + 9, c: 0 },
+                e: { r: currentRow + 9, c: 18 }
+            });
+            
+            currentRow += 12; // 1 header + 1 column header + 7 days + 1 total + 1 summary + 2 blank
+        });
+        
+        worksheet['!merges'] = merges;
+
+        // Set column widths
+        worksheet['!cols'] = [
+            {wch: 10}, {wch: 8}, {wch: 4}, {wch: 8}, {wch: 4}, {wch: 8}, {wch: 4},
+            {wch: 10}, {wch: 4}, {wch: 10}, {wch: 4}, {wch: 10}, {wch: 4},
+            {wch: 10}, {wch: 4}, {wch: 12}, {wch: 4}, {wch: 8}, {wch: 6}
+        ];
+
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Sadhana_Weekly");
+        
+        const fileName = `${userName.replace(/\s+/g, '_')}_Sadhana_Weekly.xlsx`;
         XLSX.writeFile(workbook, fileName);
 
     } catch (error) {
