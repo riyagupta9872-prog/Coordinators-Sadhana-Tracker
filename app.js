@@ -347,7 +347,13 @@ function loadReports(userId, containerId) {
         });
         
         // Process existing sadhana data
+        // FILTER: Set app start date to hide old test data (CHANGE DATE AS NEEDED)
+        const APP_START_DATE = '2026-02-13'; // Change this to your official launch date
+        
         snap.forEach(doc => {
+            // Skip old test data before app start date
+            if (doc.id < APP_START_DATE) return;
+            
             const data = doc.data();
             const week = getWeekInfo(doc.id);
             
@@ -411,6 +417,14 @@ function loadReports(userId, containerId) {
 document.getElementById('sadhana-form').onsubmit = async (e) => {
     e.preventDefault();
     const date = document.getElementById('sadhana-date').value;
+    
+    // CHECK: Prevent editing if sadhana already submitted for this date
+    const existingEntry = await db.collection('users').doc(currentUser.uid).collection('sadhana').doc(date).get();
+    if (existingEntry.exists) {
+        alert(`❌ Sadhana for ${date} is already submitted!\n\nOnce submitted, editing is not allowed.\n\nPlease contact admin if you need to make changes.`);
+        return; // Stop form submission
+    }
+    
     const level = userProfile.level || "Senior Batch";
     const slp = document.getElementById('sleep-time').value;
     const wak = document.getElementById('wakeup-time').value;
