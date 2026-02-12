@@ -348,7 +348,7 @@ function loadReports(userId, containerId) {
         
         // Process existing sadhana data
         // FILTER: Set app start date to hide old test data (CHANGE DATE AS NEEDED)
-        const APP_START_DATE = '2026-02-13'; // Change this to your official launch date
+        const APP_START_DATE = '2026-02-12'; // Change this to your official launch date
         
         snap.forEach(doc => {
             // Skip old test data before app start date
@@ -366,7 +366,7 @@ function loadReports(userId, containerId) {
         
         // Add NR for missing dates in these 4 weeks only
         // FILTER: Only add NR for dates AFTER app start date
-        const APP_START_DATE_NR = '2026-02-13'; // Must match the filter above
+        const APP_START_DATE_NR = '2026-02-12'; // Must match the filter above
         
         weeksList.forEach(weekInfo => {
             const week = weeks[weekInfo.label];
