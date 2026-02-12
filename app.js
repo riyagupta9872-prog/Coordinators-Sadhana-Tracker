@@ -75,10 +75,10 @@ window.downloadUserExcel = async (userId, userName) => {
 
         sortedWeeks.forEach((sunStr, weekIndex) => {
             const week = weeksData[sunStr];
-            
+
             // Week Header Row (merged)
             dataArray.push([`WEEK: ${week.label}`, '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '']);
-            
+
             // Column Headers
             dataArray.push([
                 'Date', 'Bed', 'M', 'Wake', 'M', 'Chant', 'M', 
@@ -183,27 +183,27 @@ window.downloadUserExcel = async (userId, userName) => {
         });
 
         const worksheet = XLSX.utils.aoa_to_sheet(dataArray);
-        
+
         // Apply styling and merges
         const merges = [];
         let currentRow = 0;
-        
+
         sortedWeeks.forEach((weekLabel, weekIndex) => {
             // Merge week header (row 0 = week header spanning all columns)
             merges.push({
                 s: { r: currentRow, c: 0 },
                 e: { r: currentRow, c: 18 }
             });
-            
+
             // Merge weekly percentage row
             merges.push({
                 s: { r: currentRow + 9, c: 0 },
                 e: { r: currentRow + 9, c: 18 }
             });
-            
+
             currentRow += 12; // 1 header + 1 column header + 7 days + 1 total + 1 summary + 2 blank
         });
-        
+
         worksheet['!merges'] = merges;
 
         // Set column widths
@@ -215,7 +215,7 @@ window.downloadUserExcel = async (userId, userName) => {
 
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Sadhana_Weekly");
-        
+
         const fileName = `${userName.replace(/\s+/g, '_')}_Sadhana_Weekly.xlsx`;
         XLSX.writeFile(workbook, fileName);
 
@@ -228,35 +228,35 @@ window.downloadUserExcel = async (userId, userName) => {
 window.downloadMasterReport = async () => {
     try {
         const usersSnap = await db.collection('users').get();
-        
+
         // Get all unique weeks from all users
         const allWeeksSet = new Set();
         const userData = [];
-        
+
         for (const uDoc of usersSnap.docs) {
             const u = uDoc.data();
             const sSnap = await uDoc.ref.collection('sadhana').get();
             const sEntries = sSnap.docs.map(d => ({ date: d.id, score: d.data().totalScore || 0 }));
-            
+
             // Find all weeks for this user
             sEntries.forEach(entry => {
                 const week = getWeekInfo(entry.date);
                 allWeeksSet.add(week.label);
             });
-            
+
             userData.push({ user: u, entries: sEntries });
         }
-        
+
         // Convert to array and sort (latest first)
         const allWeeks = Array.from(allWeeksSet).sort((a, b) => b.localeCompare(a));
-        
+
         const rows = [["User Name", "Position Level", "Chanting Category", ...allWeeks.map(w => w + " (%)")]];
-        
+
         // Calculate weekly percentages for each user
         userData.forEach(({ user, entries }) => {
             const userRow = [user.name, user.level || 'Senior Batch', user.chantingCategory || 'Level-1'];
             const weeklyMax = 1120;
-            
+
             allWeeks.forEach(weekLabel => {
                 // Find the Sunday of this week
                 const weekParts = weekLabel.split('_');
@@ -264,11 +264,11 @@ window.downloadMasterReport = async () => {
                 const dateParts = weekLabel.split(' to ')[0].split(' ');
                 const day = parseInt(dateParts[0]);
                 const monthStr = dateParts[1];
-                
+
                 // Create date from week label
                 const monthMap = { 'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5, 'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11 };
                 const weekStart = new Date(parseInt(year), monthMap[monthStr], day);
-                
+
                 let weekTotal = 0;
                 for (let i = 0; i < 7; i++) {
                     const curr = new Date(weekStart);
@@ -277,13 +277,13 @@ window.downloadMasterReport = async () => {
                     const entry = entries.find(e => e.date === ds);
                     weekTotal += entry ? entry.score : -35;
                 }
-                
+
                 userRow.push(Math.round((weekTotal / weeklyMax) * 100) + "%");
             });
-            
+
             rows.push(userRow);
         });
-        
+
         const ws = XLSX.utils.aoa_to_sheet(rows);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "Master_Report");
@@ -327,11 +327,11 @@ function showSection(sec) {
 function loadReports(userId, containerId) {
     const container = document.getElementById(containerId);
     if (!container) return;
-    
+
     if (activeListener) activeListener();
     activeListener = db.collection('users').doc(userId).collection('sadhana').onSnapshot(snap => {
         const weeks = {};
-        
+
         // Get exactly 4 weeks from today
         const weeksList = [];
         for (let weekNum = 0; weekNum < 4; weekNum++) {
@@ -340,51 +340,45 @@ function loadReports(userId, containerId) {
             const weekInfo = getWeekInfo(d.toISOString().split('T')[0]);
             weeksList.push(weekInfo);
         }
-        
+
         // Initialize weeks
         weeksList.forEach(w => {
             weeks[w.label] = { range: w.label, sunStr: w.sunStr, data: [], total: 0 };
         });
-        
+
         // Process existing sadhana data
-        // FILTER: Set app start date to hide old test data (CHANGE DATE AS NEEDED)
-        const APP_START_DATE = '2026-02-13'; // Change this to your official launch date
-        
         snap.forEach(doc => {
-            // Skip old test data before app start date
-            if (doc.id < APP_START_DATE) return;
-            
             const data = doc.data();
             const week = getWeekInfo(doc.id);
-            
+
             // Only include if this week is in our 4 weeks list
             if (weeks[week.label]) {
                 weeks[week.label].data.push({ id: doc.id, ...data });
                 weeks[week.label].total += data.totalScore || 0;
             }
         });
-        
+
         // Add NR for missing dates in these 4 weeks only
         weeksList.forEach(weekInfo => {
             const week = weeks[weekInfo.label];
             let curr = new Date(weekInfo.sunStr);
-            
+
             for (let i = 0; i < 7; i++) {
                 const dateStr = curr.toISOString().split('T')[0];
                 const exists = week.data.find(e => e.id === dateStr);
-                
+
                 if (!exists) {
                     const nrData = getNRData(dateStr);
                     week.data.push(nrData);
                     week.total += nrData.totalScore;
                 }
-                
+
                 curr.setDate(curr.getDate() + 1);
             }
         });
-        
+
         container.innerHTML = '';
-        
+
         // Display weeks in order - current week (Week 0) first, then Week 1, 2, 3
         // weeksList is already in correct order (0, 1, 2, 3)
         weeksList.forEach(weekInfo => {
@@ -417,14 +411,6 @@ function loadReports(userId, containerId) {
 document.getElementById('sadhana-form').onsubmit = async (e) => {
     e.preventDefault();
     const date = document.getElementById('sadhana-date').value;
-    
-    // CHECK: Prevent editing if sadhana already submitted for this date
-    const existingEntry = await db.collection('users').doc(currentUser.uid).collection('sadhana').doc(date).get();
-    if (existingEntry.exists) {
-        alert(`❌ Sadhana for ${date} is already submitted!\n\nOnce submitted, editing is not allowed.\n\nPlease contact admin if you need to make changes.`);
-        return; // Stop form submission
-    }
-    
     const level = userProfile.level || "Senior Batch";
     const slp = document.getElementById('sleep-time').value;
     const wak = document.getElementById('wakeup-time').value;
@@ -436,7 +422,7 @@ document.getElementById('sadhana-form').onsubmit = async (e) => {
     const dsMin = parseInt(document.getElementById('day-sleep-minutes').value) || 0;
 
     const sc = { sleep: -5, wakeup: -5, chanting: -5, reading: -5, hearing: -5, service: -5, notes: -5, daySleep: 0 };
-    
+
     // Sleep Score (Target 10:30 PM / 1350 mins)
     const slpM = t2m(slp, true);
     if (slpM <= 1350) sc.sleep = 25;
@@ -522,7 +508,7 @@ document.getElementById('sadhana-form').onsubmit = async (e) => {
         levelAtSubmission: level, 
         submittedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
-    
+
     alert(`Success! Score: ${total} (${dayPercent}%)`); 
     switchTab('reports');
 };
@@ -540,14 +526,14 @@ async function loadAdminPanel() {
     const usersSnap = await db.collection('users').get();
     let html = `<table class="admin-table"><thead><tr><th>User</th><th>Position</th><th>Chanting Cat</th>${weeks.map(w => `<th>${w.label} (%)</th>`).join('')}</tr></thead><tbody>`;
     usersList.innerHTML = '';
-    
+
     for (const uDoc of usersSnap.docs) {
         const u = uDoc.data();
         html += `<tr><td>${u.name}</td><td>${u.level || 'Senior Batch'}</td><td>${u.chantingCategory || 'N/A'}</td>`;
         const sSnap = await uDoc.ref.collection('sadhana').get();
         const sEntries = sSnap.docs.map(d => ({ date: d.id, score: d.data().totalScore || 0 }));
         const weeklyMax = 1120;
-        
+
         weeks.forEach(w => {
             let weekTotal = 0; let curr = new Date(w.sunStr);
             for (let i = 0; i < 7; i++) {
@@ -559,7 +545,7 @@ async function loadAdminPanel() {
             html += `<td>${Math.round((weekTotal/weeklyMax)*100)}%</td>`;
         });
         html += `</tr>`;
-        
+
         const uDiv = document.createElement('div');
         uDiv.className = 'card'; 
         uDiv.style = "margin-bottom:10px; padding:12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;";
@@ -587,7 +573,7 @@ function setupDateSelect() {
     const s = document.getElementById('sadhana-date'); 
     if (!s) return; 
     s.innerHTML = '';
-    
+
     for (let i = 0; i < 2; i++) {
         const d = new Date(); 
         d.setDate(d.getDate() - i);
@@ -597,7 +583,7 @@ function setupDateSelect() {
         opt.textContent = iso;
         s.appendChild(opt);
     }
-    
+
     // Show/hide Notes field based on position
     const notesArea = document.getElementById('notes-area');
     if (notesArea && userProfile?.level === 'Senior Batch') {
