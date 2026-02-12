@@ -598,18 +598,24 @@ function setupDateSelect() {
     if (!s) return; 
     s.innerHTML = '';
     
-    // Add today and yesterday
+    // Add today and yesterday using LOCAL timezone (not UTC)
     for (let i = 0; i < 2; i++) {
         const d = new Date(); 
         d.setDate(d.getDate() - i);
-        const iso = d.toISOString().split('T')[0];
+        
+        // Use local date format instead of ISO (which uses UTC)
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const localDate = `${year}-${month}-${day}`;
+        
         const opt = document.createElement('option'); 
-        opt.value = iso; 
-        opt.textContent = iso;
+        opt.value = localDate; 
+        opt.textContent = localDate;
         s.appendChild(opt);
     }
     
-    console.log('Date dropdown populated with:', s.innerHTML); // Debug
+    console.log('Date dropdown populated:', s.options[0]?.value, s.options[1]?.value); // Debug
     
     // Show/hide Notes field based on position
     const notesArea = document.getElementById('notes-area');
