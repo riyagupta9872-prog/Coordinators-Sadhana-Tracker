@@ -555,9 +555,9 @@ async function loadAdminPanel() {
             </div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
                 <button onclick="openUserModal('${uDoc.id}','${safe}')" title="View History"
-                    style="width:38px;height:38px;padding:0;margin:0;border-radius:8px;background:#3b82f6;font-size:18px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;">📋</button>
+                    style="width:38px;height:38px;padding:0;margin:0;border-radius:8px;background:#3b82f6;font-size:18px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;">History</button>
                 <button onclick="downloadUserExcel('${uDoc.id}','${safe}')" title="Download Excel"
-                    style="width:38px;height:38px;padding:0;margin:0;border-radius:8px;background:#16a34a;font-size:18px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;">📥</button>
+                    style="width:38px;height:38px;padding:0;margin:0;border-radius:8px;background:#16a34a;font-size:18px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;">Excel</button>
                 ${roleDropdown}
             </div>`;
         usersList.appendChild(card);
