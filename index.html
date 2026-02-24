@@ -7,7 +7,8 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
-    <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+    <!-- XLSX: using unpkg which is far more reliable than cdn.sheetjs.com -->
+    <script src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
         :root { --primary: #2c3e50; --secondary: #3498db; --success: #27ae60; --danger: #e74c3c; --light: #f4f7f6; --white: #ffffff; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--light); margin: 0; padding: 0; }
@@ -21,20 +22,23 @@
         .nav-tabs { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
         .tab-btn { background: #eee; color: #666; padding: 10px 20px; border-radius: 20px; width: auto; }
         .tab-btn.active { background: var(--secondary); color: white; }
-        .input-group { display: flex; gap: 10px; }
-        .input-group input { flex: 1; }
         .admin-table { width: 100%; border-collapse: collapse; margin-top: 15px; background: white; font-size: 13px; }
-        .admin-table th, .admin-table td { border: 1px solid #ddd; padding: 10px; text-align: center; }
-        .admin-table th { background: #f8f9fa; }
+        .admin-table th, .admin-table td { border: 1px solid #ddd; padding: 8px 10px; text-align: center; }
+        .admin-table th { background: #f8f9fa; font-size: 12px; }
         .week-card { background: white; margin-bottom: 10px; border-radius: 8px; border-left: 5px solid var(--secondary); box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
         .week-header { padding: 15px; cursor: pointer; display: flex; justify-content: space-between; font-weight: bold; }
         .week-content { padding: 15px; border-top: 1px solid #eee; }
         .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; justify-content: center; align-items: center; z-index: 1000; }
         .modal-content { background: white; width: 95%; max-width: 900px; padding: 25px; border-radius: 12px; max-height: 90vh; overflow-y: auto; position: relative; }
+        .pwd-section { margin-top: 20px; padding-top: 16px; border-top: 1px dashed #ddd; }
+        .pwd-section label.section-title { font-size: 13px; color: #888; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 4px; }
+        .pwd-hint { font-size: 12px; color: #aaa; margin: -4px 0 6px 0; }
     </style>
 </head>
 <body>
     <div class="container">
+
+        <!-- AUTH -->
         <section id="auth-section" class="card">
             <h2 style="text-align:center;">Sadhana Tracker</h2>
             <form id="login-form">
@@ -46,20 +50,19 @@
             <p style="text-align:center; margin-top:12px;">Don't have an account? <a href="signup.html" style="color:var(--secondary); font-weight:600;">Sign Up</a></p>
         </section>
 
+        <!-- PROFILE -->
         <section id="profile-section" class="card hidden">
             <h2 id="profile-title">Complete Your Profile</h2>
             <form id="profile-form">
                 <input type="text" id="profile-name" placeholder="Full Name" required>
-                
-                <label style="font-weight: bold; margin-top: 10px;">Position Level:</label>
+                <label style="font-weight:bold; margin-top:10px;">Position Level:</label>
                 <select id="profile-level" required>
                     <option value="">Select Position Level</option>
                     <option value="Senior Batch">Senior Batch</option>
                     <option value="IGF & IYF Coordinator">IGF & IYF Coordinator</option>
                     <option value="ICF Coordinator">ICF Coordinator</option>
                 </select>
-
-                <label style="font-weight: bold; margin-top: 10px;">Chanting Category:</label>
+                <label style="font-weight:bold; margin-top:10px;">Chanting Category:</label>
                 <select id="profile-chanting" required>
                     <option value="">Select Chanting Category</option>
                     <option value="Level-1">Level-1 (1-4 Rounds)</option>
@@ -67,18 +70,24 @@
                     <option value="Level-3">Level-3 (9-15 Rounds)</option>
                     <option value="Level-4">Level-4 (16 Rounds)</option>
                 </select>
-                
                 <input type="number" id="profile-exact-rounds" placeholder="Current Exact Rounds" required>
-                <button type="submit">Save Profile</button>
+                <div class="pwd-section">
+                    <label class="section-title">🔑 Change Password (optional)</label>
+                    <p class="pwd-hint">Leave blank to keep your current password</p>
+                    <input type="password" id="new-password" placeholder="New Password (min 6 characters)" minlength="6" autocomplete="new-password">
+                    <input type="password" id="confirm-password" placeholder="Confirm New Password" autocomplete="new-password">
+                </div>
+                <button type="submit" style="margin-top:16px;">Save Profile</button>
                 <button type="button" onclick="showSection('dashboard')" id="cancel-edit" class="hidden" style="background:#95a5a6">Cancel</button>
             </form>
         </section>
 
+        <!-- DASHBOARD -->
         <section id="dashboard-section" class="hidden">
             <div class="header">
                 <div>
-                    <strong id="user-display-name"></strong>
-                    <br><button onclick="openProfileEdit()" style="width:auto; padding:2px 10px; font-size:11px; margin-top:5px; background: #95a5a6;">Edit Profile</button>
+                    <strong id="user-display-name"></strong><br>
+                    <button onclick="openProfileEdit()" style="width:auto; padding:2px 10px; font-size:11px; margin-top:5px; background:#95a5a6;">Edit Profile</button>
                 </div>
                 <button id="logout-btn" style="width:auto; padding:8px 20px; background:var(--danger)">Logout</button>
             </div>
@@ -89,6 +98,7 @@
                 <button class="tab-btn hidden" id="admin-tab-btn" onclick="switchTab('admin')">Admin Panel</button>
             </div>
 
+            <!-- SADHANA TAB -->
             <div id="sadhana-tab" class="tab-content">
                 <div class="card">
                     <form id="sadhana-form">
@@ -96,37 +106,35 @@
                         <label>Bed Time (Yesterday):</label><input type="time" id="sleep-time" required>
                         <label>Wake Up Time:</label><input type="time" id="wakeup-time" required>
                         <label>Chanting (Last round by):</label><input type="time" id="chanting-time" required>
-                        
                         <label>Reading (Pathan) - Minutes:</label>
                         <input type="number" id="reading-mins" placeholder="Enter minutes" required min="0" value="0">
-                        
                         <label>Hearing (Shravan) - Minutes:</label>
                         <input type="number" id="hearing-mins" placeholder="Enter minutes" required min="0" value="0">
-
                         <div id="service-area">
                             <label>Service (Seva) - Minutes:</label>
                             <input type="number" id="service-mins" placeholder="Enter minutes" required min="0" value="0">
                         </div>
-
                         <div id="notes-area" class="hidden">
                             <label>Notes Revision - Minutes:</label>
                             <input type="number" id="notes-mins" placeholder="Enter minutes" required min="0" value="0">
                         </div>
-
-                        <label>Day Sleep (Mins):</label><input type="number" id="day-sleep-minutes" value="0" required>
-                        <button type="submit" style="background: var(--success); margin-top: 15px;">Submit Sadhana</button>
+                        <label>Day Sleep (Mins):</label>
+                        <input type="number" id="day-sleep-minutes" value="0" required>
+                        <button type="submit" style="background:var(--success); margin-top:15px;">Submit Sadhana</button>
                     </form>
                 </div>
             </div>
 
+            <!-- REPORTS TAB -->
             <div id="reports-tab" class="tab-content hidden">
-                <button onclick="downloadUserExcel(currentUser.uid, userProfile.name)" style="background:var(--success); margin-bottom:15px">Download My History (Excel)</button>       
+                <button onclick="downloadUserExcel(currentUser.uid, userProfile.name)" style="background:var(--success); margin-bottom:15px;">📥 Download My History (Excel)</button>
                 <div id="weekly-reports-container"></div>
             </div>
 
+            <!-- ADMIN TAB -->
             <div id="admin-tab" class="tab-content hidden">
-                <div style="display:flex; gap:10px; margin-bottom:15px">
-                    <button onclick="downloadMasterReport()" style="background:var(--success)">Download Master Comparative Excel</button>
+                <div style="margin-bottom:15px">
+                    <button onclick="downloadMasterReport()" style="background:var(--success);">📥 Download Master Comparative Excel</button>
                 </div>
                 <div class="card" style="overflow-x:auto">
                     <h3>4-Week Performance (%)</h3>
@@ -140,6 +148,7 @@
         </section>
     </div>
 
+    <!-- MODAL -->
     <div id="user-report-modal" class="modal hidden">
         <div class="modal-content">
             <span onclick="closeUserModal()" style="position:absolute; right:20px; top:20px; cursor:pointer; font-size:24px; font-weight:bold;">&times;</span>
