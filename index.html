@@ -3,160 +3,300 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sadhana Tracker - Position Based</title>
+    <title>Sadhana Tracker</title>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
-    <!-- XLSX: using unpkg which is far more reliable than cdn.sheetjs.com -->
     <script src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
-        :root { --primary: #2c3e50; --secondary: #3498db; --success: #27ae60; --danger: #e74c3c; --light: #f4f7f6; --white: #ffffff; }
+        :root {
+            --primary: #2c3e50; --secondary: #3498db; --success: #27ae60;
+            --danger: #e74c3c; --warning: #f39c12; --light: #f4f7f6;
+            --white: #ffffff; --border: #e5e7eb; --muted: #6b7280;
+        }
+        * { box-sizing: border-box; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--light); margin: 0; padding: 0; }
-        .container { max-width: 1000px; margin: 0 auto; padding: 20px; }
+        .container { max-width: 1000px; margin: 0 auto; padding: 16px; }
         .hidden { display: none !important; }
-        .card { background: var(--white); padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); margin-bottom: 20px; }
-        input, select, button { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
-        button { background: var(--secondary); color: white; border: none; cursor: pointer; font-weight: 600; transition: 0.3s; }
-        button:hover { opacity: 0.9; }
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding: 15px; background: white; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-        .nav-tabs { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
-        .tab-btn { background: #eee; color: #666; padding: 10px 20px; border-radius: 20px; width: auto; }
+        .card { background: var(--white); padding: 22px; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.07); margin-bottom: 18px; }
+
+        /* Inputs */
+        input, select { width: 100%; padding: 11px 13px; margin: 5px 0; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; background: white; }
+        input:focus, select:focus { outline: none; border-color: var(--secondary); box-shadow: 0 0 0 3px rgba(52,152,219,0.1); }
+        .form-label { font-weight: 600; font-size: 13px; color: #444; margin: 10px 0 2px; display: block; }
+
+        /* Buttons */
+        button { width: 100%; padding: 11px; margin: 5px 0; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.18s; }
+        button:hover:not(:disabled) { opacity: 0.87; transform: translateY(-1px); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        .btn-primary { background: var(--secondary); color: white; }
+        .btn-success { background: var(--success); color: white; }
+        .btn-danger  { background: var(--danger); color: white; }
+        .btn-gray    { background: #95a5a6; color: white; }
+        .btn-purple  { background: #7c3aed; color: white; }
+        .btn-teal    { background: #0d9488; color: white; }
+        .btn-sm      { width: auto !important; padding: 6px 14px !important; font-size: 12px !important; margin: 2px !important; }
+
+        /* Header */
+        .app-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; padding: 13px 16px; background: white; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+        .header-name { font-weight: 700; font-size: 15px; color: var(--primary); }
+        .header-role { font-size: 12px; color: var(--muted); margin-top: 1px; }
+        .header-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+
+        /* Nav tabs */
+        .nav-tabs { display: flex; gap: 7px; margin-bottom: 18px; flex-wrap: wrap; }
+        .tab-btn { background: #e9ecef; color: #555; padding: 8px 16px; border-radius: 20px; width: auto; font-size: 13px; margin: 0; }
         .tab-btn.active { background: var(--secondary); color: white; }
-        .admin-table { width: 100%; border-collapse: collapse; margin-top: 15px; background: white; font-size: 13px; }
-        .admin-table th, .admin-table td { border: 1px solid #ddd; padding: 8px 10px; text-align: center; }
-        .admin-table th { background: #f8f9fa; font-size: 12px; }
-        .week-card { background: white; margin-bottom: 10px; border-radius: 8px; border-left: 5px solid var(--secondary); box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-        .week-header { padding: 15px; cursor: pointer; display: flex; justify-content: space-between; font-weight: bold; }
-        .week-content { padding: 15px; border-top: 1px solid #eee; }
-        .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; justify-content: center; align-items: center; z-index: 1000; }
-        .modal-content { background: white; width: 95%; max-width: 900px; padding: 25px; border-radius: 12px; max-height: 90vh; overflow-y: auto; position: relative; }
-        .pwd-section { margin-top: 20px; padding-top: 16px; border-top: 1px dashed #ddd; }
-        .pwd-section label.section-title { font-size: 13px; color: #888; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 4px; }
-        .pwd-hint { font-size: 12px; color: #aaa; margin: -4px 0 6px 0; }
+
+        /* Tab panels */
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+
+        /* Week cards */
+        .week-card { background: white; margin-bottom: 10px; border-radius: 10px; border-left: 4px solid var(--secondary); box-shadow: 0 1px 6px rgba(0,0,0,0.06); overflow: hidden; }
+        .week-header { padding: 13px 16px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-weight: 600; font-size: 14px; user-select: none; }
+        .week-header:hover { background: #f9fafb; }
+        .week-body { padding: 10px 14px; border-top: 1px solid #f0f0f0; overflow-x: auto; display: none; }
+        .week-body.open { display: block; }
+
+        /* Tables */
+        .data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .data-table th, .data-table td { border: 1px solid #e0e0e0; padding: 7px 9px; text-align: center; white-space: nowrap; }
+        .data-table th { background: #f8f9fa; font-weight: 600; font-size: 11px; }
+        .data-table td:first-child { text-align: left; font-weight: 500; }
+
+        /* Modals */
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.72); display: flex; justify-content: center; align-items: center; z-index: 999; padding: 16px; }
+        .modal-box { background: white; width: 100%; max-width: 900px; padding: 24px; border-radius: 14px; max-height: 92vh; overflow-y: auto; position: relative; }
+        .modal-box.sm { max-width: 420px; }
+        .modal-close { position: absolute; right: 16px; top: 12px; font-size: 24px; cursor: pointer; color: #aaa; background: none; border: none; width: auto; padding: 4px 8px; margin: 0; line-height: 1; }
+        .modal-close:hover { color: #333; transform: none; }
+        .modal-title { font-size: 17px; font-weight: 700; color: var(--primary); margin: 0 0 18px; padding-right: 30px; }
+
+        /* Admin user cards */
+        .user-card { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; background: white; }
+        .user-name  { font-weight: 700; font-size: 15px; }
+        .user-meta  { font-size: 12px; color: var(--muted); margin-top: 3px; }
+        .user-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+        .role-badge { display: inline-block; padding: 2px 9px; border-radius: 10px; font-size: 11px; font-weight: 600; margin-left: 6px; vertical-align: middle; }
+
+        /* Info banner */
+        .info-banner { padding: 9px 14px; border-radius: 8px; margin-bottom: 12px; font-size: 13px; }
+        .banner-purple { background: #f3e8ff; color: #6d28d9; }
+        .banner-blue   { background: #eff6ff; color: #1d4ed8; }
+
+        /* Chart */
+        .chart-tabs { display: flex; gap: 7px; margin-bottom: 16px; flex-wrap: wrap; }
+        .chart-tab-btn { background: #e9ecef; color: #555; padding: 7px 16px; border-radius: 20px; width: auto; font-size: 13px; margin: 0; }
+        .chart-tab-btn.active { background: var(--secondary); color: white; }
+        .chart-container { position: relative; height: 260px; }
+
+        /* Password modal */
+        .pwd-field-group { margin-bottom: 14px; }
+        .pwd-field-group label { font-weight: 600; font-size: 13px; color: #444; display: block; margin-bottom: 4px; }
+
+        /* Section divider in profile */
+        hr.section-hr { border: none; border-top: 1px dashed #e0e0e0; margin: 20px 0; }
     </style>
 </head>
 <body>
-    <div class="container">
+<div class="container">
 
-        <!-- AUTH -->
-        <section id="auth-section" class="card">
-            <h2 style="text-align:center;">Sadhana Tracker</h2>
-            <form id="login-form">
-                <input type="email" id="login-email" placeholder="Email" required>
-                <input type="password" id="login-password" placeholder="Password" required>
-                <button type="submit">Login</button>
-            </form>
-            <button onclick="window.location.href='signup.html'" style="background:#27ae60; margin-top:4px;">Sign Up</button>
-            <p style="text-align:center; margin-top:12px;">Don't have an account? <a href="signup.html" style="color:var(--secondary); font-weight:600;">Sign Up</a></p>
-        </section>
+    <!-- ══ AUTH ══ -->
+    <section id="auth-section" class="card">
+        <h2 style="text-align:center;margin-bottom:20px;color:var(--primary);">🙏 Sadhana Tracker</h2>
+        <form id="login-form">
+            <input type="email"    id="login-email"    placeholder="Email" required>
+            <input type="password" id="login-password" placeholder="Password" required>
+            <button type="submit" class="btn-primary" style="margin-top:10px;">Login</button>
+        </form>
+        <button onclick="window.location.href='signup.html'" class="btn-success">Create Account</button>
+        <p style="text-align:center;margin-top:14px;font-size:13px;color:var(--muted);">
+            New here? <a href="signup.html" style="color:var(--secondary);font-weight:600;">Sign Up</a>
+        </p>
+    </section>
 
-        <!-- PROFILE -->
-        <section id="profile-section" class="card hidden">
-            <h2 id="profile-title">Complete Your Profile</h2>
-            <form id="profile-form">
-                <input type="text" id="profile-name" placeholder="Full Name" required>
-                <label style="font-weight:bold; margin-top:10px;">Position Level:</label>
-                <select id="profile-level" required>
-                    <option value="">Select Position Level</option>
-                    <option value="Senior Batch">Senior Batch</option>
-                    <option value="IGF & IYF Coordinator">IGF & IYF Coordinator</option>
-                    <option value="ICF Coordinator">ICF Coordinator</option>
-                </select>
-                <label style="font-weight:bold; margin-top:10px;">Chanting Category:</label>
-                <select id="profile-chanting" required>
-                    <option value="">Select Chanting Category</option>
-                    <option value="Level-1">Level-1 (1-4 Rounds)</option>
-                    <option value="Level-2">Level-2 (5-8 Rounds)</option>
-                    <option value="Level-3">Level-3 (9-15 Rounds)</option>
-                    <option value="Level-4">Level-4 (16 Rounds)</option>
-                </select>
-                <input type="number" id="profile-exact-rounds" placeholder="Current Exact Rounds" required>
-                <div class="pwd-section">
-                    <label class="section-title">🔑 Change Password (optional)</label>
-                    <p class="pwd-hint">Leave blank to keep your current password</p>
-                    <input type="password" id="new-password" placeholder="New Password (min 6 characters)" minlength="6" autocomplete="new-password">
-                    <input type="password" id="confirm-password" placeholder="Confirm New Password" autocomplete="new-password">
-                </div>
-                <button type="submit" style="margin-top:16px;">Save Profile</button>
-                <button type="button" onclick="showSection('dashboard')" id="cancel-edit" class="hidden" style="background:#95a5a6">Cancel</button>
-            </form>
-        </section>
+    <!-- ══ PROFILE SETUP ══ -->
+    <section id="profile-section" class="card hidden">
+        <h2 id="profile-title" style="color:var(--primary);margin-bottom:4px;">Complete Your Profile</h2>
+        <p id="profile-subtitle" style="color:var(--muted);font-size:13px;margin-bottom:20px;">Tell us about yourself to get started</p>
+        <form id="profile-form">
+            <label class="form-label">Full Name</label>
+            <input type="text" id="profile-name" placeholder="Full Name" required>
 
-        <!-- DASHBOARD -->
-        <section id="dashboard-section" class="hidden">
-            <div class="header">
-                <div>
-                    <strong id="user-display-name"></strong><br>
-                    <button onclick="openProfileEdit()" style="width:auto; padding:2px 10px; font-size:11px; margin-top:5px; background:#95a5a6;">Edit Profile</button>
-                </div>
-                <button id="logout-btn" style="width:auto; padding:8px 20px; background:var(--danger)">Logout</button>
+            <label class="form-label">Position Level</label>
+            <select id="profile-level" required>
+                <option value="">Select your position</option>
+                <option value="Senior Batch">Senior Batch</option>
+                <option value="IGF & IYF Coordinator">IGF & IYF Coordinator</option>
+                <option value="ICF Coordinator">ICF Coordinator</option>
+            </select>
+
+            <label class="form-label">Chanting Category</label>
+            <select id="profile-chanting" required>
+                <option value="">Select chanting level</option>
+                <option value="Level-1">Level-1 (1–4 Rounds)</option>
+                <option value="Level-2">Level-2 (5–8 Rounds)</option>
+                <option value="Level-3">Level-3 (9–15 Rounds)</option>
+                <option value="Level-4">Level-4 (16 Rounds)</option>
+            </select>
+
+            <label class="form-label">Current Exact Rounds</label>
+            <input type="number" id="profile-exact-rounds" placeholder="e.g. 12" required>
+
+            <button type="submit" class="btn-success" style="margin-top:16px;">Save & Continue</button>
+            <button type="button" onclick="showSection('dashboard')" id="cancel-edit" class="btn-gray hidden">Cancel</button>
+        </form>
+    </section>
+
+    <!-- ══ DASHBOARD ══ -->
+    <section id="dashboard-section" class="hidden">
+
+        <div class="app-header">
+            <div>
+                <div class="header-name" id="user-display-name"></div>
+                <div class="header-role" id="user-role-display"></div>
             </div>
-
-            <div class="nav-tabs">
-                <button class="tab-btn active" onclick="switchTab('sadhana')">Daily Entry</button>
-                <button class="tab-btn" onclick="switchTab('reports')">My Reports</button>
-                <button class="tab-btn hidden" id="admin-tab-btn" onclick="switchTab('admin')">Admin Panel</button>
+            <div class="header-btns">
+                <button onclick="openProfileEdit()"   class="btn-gray btn-sm">Edit Profile</button>
+                <button onclick="openPasswordModal()" class="btn-primary btn-sm">Change Password</button>
+                <button id="logout-btn"               class="btn-danger btn-sm">Logout</button>
             </div>
-
-            <!-- SADHANA TAB -->
-            <div id="sadhana-tab" class="tab-content">
-                <div class="card">
-                    <form id="sadhana-form">
-                        <label>Date:</label><select id="sadhana-date" required></select>
-                        <label>Bed Time (Yesterday):</label><input type="time" id="sleep-time" required>
-                        <label>Wake Up Time:</label><input type="time" id="wakeup-time" required>
-                        <label>Chanting (Last round by):</label><input type="time" id="chanting-time" required>
-                        <label>Reading (Pathan) - Minutes:</label>
-                        <input type="number" id="reading-mins" placeholder="Enter minutes" required min="0" value="0">
-                        <label>Hearing (Shravan) - Minutes:</label>
-                        <input type="number" id="hearing-mins" placeholder="Enter minutes" required min="0" value="0">
-                        <div id="service-area">
-                            <label>Service (Seva) - Minutes:</label>
-                            <input type="number" id="service-mins" placeholder="Enter minutes" required min="0" value="0">
-                        </div>
-                        <div id="notes-area" class="hidden">
-                            <label>Notes Revision - Minutes:</label>
-                            <input type="number" id="notes-mins" placeholder="Enter minutes" required min="0" value="0">
-                        </div>
-                        <label>Day Sleep (Mins):</label>
-                        <input type="number" id="day-sleep-minutes" value="0" required>
-                        <button type="submit" style="background:var(--success); margin-top:15px;">Submit Sadhana</button>
-                    </form>
-                </div>
-            </div>
-
-            <!-- REPORTS TAB -->
-            <div id="reports-tab" class="tab-content hidden">
-                <button onclick="downloadUserExcel(currentUser.uid, userProfile.name)" style="background:var(--success); margin-bottom:15px;">📥 Download My History (Excel)</button>
-                <div id="weekly-reports-container"></div>
-            </div>
-
-            <!-- ADMIN TAB -->
-            <div id="admin-tab" class="tab-content hidden">
-                <div style="margin-bottom:15px">
-                    <button onclick="downloadMasterReport()" style="background:var(--success);">📥 Download Master Comparative Excel</button>
-                </div>
-                <div class="card" style="overflow-x:auto">
-                    <h3>4-Week Performance (%)</h3>
-                    <div id="admin-comparative-reports-container"></div>
-                </div>
-                <div class="card">
-                    <h3>User Management</h3>
-                    <div id="admin-users-list"></div>
-                </div>
-            </div>
-        </section>
-    </div>
-
-    <!-- MODAL -->
-    <div id="user-report-modal" class="modal hidden">
-        <div class="modal-content">
-            <span onclick="closeUserModal()" style="position:absolute; right:20px; top:20px; cursor:pointer; font-size:24px; font-weight:bold;">&times;</span>
-            <h2 id="modal-user-name" style="margin-top:0"></h2>
-            <div id="modal-report-container"></div>
         </div>
-    </div>
 
-    <script src="app.js"></script>
+        <div class="nav-tabs">
+            <button class="tab-btn active" onclick="switchTab('sadhana')">Daily Entry</button>
+            <button class="tab-btn"        onclick="switchTab('reports')">My Reports</button>
+            <button class="tab-btn"        onclick="switchTab('progress')">My Progress</button>
+            <button class="tab-btn hidden" id="admin-tab-btn" onclick="switchTab('admin')">Admin Panel</button>
+        </div>
+
+        <!-- SADHANA ENTRY -->
+        <div id="sadhana-panel" class="tab-panel active">
+            <div class="card">
+                <form id="sadhana-form">
+                    <label class="form-label">Date</label>
+                    <select id="sadhana-date" required></select>
+
+                    <label class="form-label">Bed Time (Previous Night)</label>
+                    <input type="time" id="sleep-time" required>
+
+                    <label class="form-label">Wake Up Time</label>
+                    <input type="time" id="wakeup-time" required>
+
+                    <label class="form-label">Chanting Completed By</label>
+                    <input type="time" id="chanting-time" required>
+
+                    <label class="form-label">Reading (Pathan) — Minutes</label>
+                    <input type="number" id="reading-mins" value="0" min="0" required>
+
+                    <label class="form-label">Hearing (Shravan) — Minutes</label>
+                    <input type="number" id="hearing-mins" value="0" min="0" required>
+
+                    <div id="service-area">
+                        <label class="form-label">Service (Seva) — Minutes</label>
+                        <input type="number" id="service-mins" value="0" min="0" required>
+                    </div>
+                    <div id="notes-area" class="hidden">
+                        <label class="form-label">Notes Revision — Minutes</label>
+                        <input type="number" id="notes-mins" value="0" min="0">
+                    </div>
+
+                    <label class="form-label">Day Sleep — Minutes</label>
+                    <input type="number" id="day-sleep-minutes" value="0" required>
+
+                    <button type="submit" class="btn-success" style="margin-top:16px;">Submit Sadhana</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- MY REPORTS -->
+        <div id="reports-panel" class="tab-panel">
+            <div style="margin-bottom:14px;">
+                <button onclick="downloadUserExcel(currentUser.uid, userProfile.name)" class="btn-success btn-sm" style="width:auto;padding:9px 20px;">
+                    Download My History (Excel)
+                </button>
+            </div>
+            <div id="weekly-reports-container"></div>
+        </div>
+
+        <!-- MY PROGRESS CHARTS -->
+        <div id="progress-panel" class="tab-panel">
+            <div class="card">
+                <h3 style="margin:0 0 14px;color:var(--primary);font-size:16px;">My Progress</h3>
+                <div class="chart-tabs">
+                    <button class="chart-tab-btn active" onclick="setChartView('daily', this, currentUser.uid, userProfile.name)">Daily</button>
+                    <button class="chart-tab-btn"        onclick="setChartView('weekly', this, currentUser.uid, userProfile.name)">Weekly</button>
+                    <button class="chart-tab-btn"        onclick="setChartView('monthly', this, currentUser.uid, userProfile.name)">Monthly</button>
+                </div>
+                <div class="chart-container"><canvas id="my-progress-chart"></canvas></div>
+                <p style="font-size:11px;color:var(--muted);text-align:center;margin-top:8px;">Daily max: 160 · Weekly max: 1120</p>
+            </div>
+        </div>
+
+        <!-- ADMIN PANEL -->
+        <div id="admin-panel" class="tab-panel">
+            <div style="margin-bottom:14px;">
+                <button onclick="downloadMasterReport()" class="btn-success btn-sm" style="width:auto;padding:9px 20px;">
+                    Download Master Comparative (Excel)
+                </button>
+            </div>
+            <div class="card" style="overflow-x:auto;">
+                <h3 style="margin:0 0 12px;color:var(--primary);font-size:15px;">4-Week Performance (%)</h3>
+                <div id="admin-comparative-reports-container"></div>
+            </div>
+            <div class="card">
+                <h3 style="margin:0 0 12px;color:var(--primary);font-size:15px;">User Management</h3>
+                <div id="admin-users-list"></div>
+            </div>
+        </div>
+
+    </section><!-- end dashboard -->
+</div><!-- end container -->
+
+<!-- ══ MODAL: User History ══ -->
+<div id="user-report-modal" class="modal-overlay hidden">
+    <div class="modal-box">
+        <button class="modal-close" onclick="closeUserModal()">×</button>
+        <div class="modal-title" id="modal-user-name"></div>
+        <div id="modal-report-container"></div>
+    </div>
+</div>
+
+<!-- ══ MODAL: Progress Chart (Admin view) ══ -->
+<div id="progress-modal" class="modal-overlay hidden">
+    <div class="modal-box">
+        <button class="modal-close" onclick="closeProgressModal()">×</button>
+        <div class="modal-title" id="progress-modal-title">Progress</div>
+        <div class="chart-tabs" id="progress-modal-tabs">
+            <button class="chart-tab-btn active" onclick="setModalChartView('daily', this)">Daily</button>
+            <button class="chart-tab-btn"        onclick="setModalChartView('weekly', this)">Weekly</button>
+            <button class="chart-tab-btn"        onclick="setModalChartView('monthly', this)">Monthly</button>
+        </div>
+        <div class="chart-container" style="height:280px;"><canvas id="modal-progress-chart"></canvas></div>
+        <p style="font-size:11px;color:var(--muted);text-align:center;margin-top:8px;">Daily max: 160 · Weekly max: 1120</p>
+    </div>
+</div>
+
+<!-- ══ MODAL: Change Password ══ -->
+<div id="password-modal" class="modal-overlay hidden">
+    <div class="modal-box sm">
+        <button class="modal-close" onclick="closePasswordModal()">×</button>
+        <div class="modal-title">🔑 Change Password</div>
+        <div class="pwd-field-group">
+            <label>New Password</label>
+            <input type="password" id="pwd-new" placeholder="Minimum 6 characters" autocomplete="new-password">
+        </div>
+        <div class="pwd-field-group">
+            <label>Confirm New Password</label>
+            <input type="password" id="pwd-confirm" placeholder="Re-enter new password" autocomplete="new-password">
+        </div>
+        <button onclick="submitPasswordChange()" class="btn-primary" style="margin-top:6px;">Update Password</button>
+        <button onclick="closePasswordModal()" class="btn-gray">Cancel</button>
+    </div>
+</div>
+
+<script src="app.js"></script>
 </body>
 </html>
