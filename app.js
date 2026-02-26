@@ -337,36 +337,43 @@ window.downloadMasterReport = async () => {
     try {
         const usersSnap = await db.collection('users').get();
         const cats = visibleCategories();
-        const userData = []; const weekSet = new Set();
+        const userData = [];
+        // Use Map: sunStr → label  (sunStr = YYYY-MM-DD, sorts correctly)
+        const weekMap = new Map();
 
         for (const uDoc of usersSnap.docs) {
             const u = uDoc.data();
             if (!cats.includes(u.level||'Senior Batch')) continue;
             const sSnap = await uDoc.ref.collection('sadhana').get();
             const entries = sSnap.docs.map(d=>({date:d.id, score:d.data().totalScore||0}));
-            entries.forEach(en => weekSet.add(getWeekInfo(en.date).label));
+            entries.forEach(en => {
+                const wi = getWeekInfo(en.date);
+                weekMap.set(wi.sunStr, wi.label);
+            });
             userData.push({ user:u, entries });
         }
         userData.sort((a,b)=>(a.user.name||'').localeCompare(b.user.name||''));
 
-        const allWeeks = Array.from(weekSet).sort((a,b)=>b.localeCompare(a));
-        const MON = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
-        const rows = [['User Name','Position Level','Chanting Category',...allWeeks.map(w=>w+' (%)')]];
+        // Sort weeks by sunStr descending (newest first) — YYYY-MM-DD sorts perfectly
+        const allWeeks = Array.from(weekMap.entries())
+            .sort((a,b) => b[0].localeCompare(a[0]))
+            .map(([sunStr, label]) => ({ sunStr, label }));
+
+        const rows = [['User Name','Position Level','Chanting Category',...allWeeks.map(w=>w.label.replace('_',' '))]];
 
         userData.forEach(({user,entries}) => {
             const row = [user.name, user.level||'Senior Batch', user.chantingCategory||'Level-1'];
-            allWeeks.forEach(wl => {
-                const yr   = parseInt(wl.split('_')[1]);
-                const pts  = wl.split(' to ')[0].split(' ');
-                const wSun = new Date(yr, MON[pts[1]], parseInt(pts[0]));
+            allWeeks.forEach(({ sunStr }) => {
                 let tot = 0;
+                const wSun = new Date(sunStr);
                 for (let i=0;i<7;i++) {
                     const c  = new Date(wSun); c.setDate(c.getDate()+i);
                     const ds = c.toISOString().split('T')[0];
                     const en = entries.find(e=>e.date===ds);
                     tot += en ? en.score : -35;
                 }
-                row.push(Math.round((tot/1120)*100)+'%');
+                const pct = Math.round((tot/1120)*100);
+                row.push(pct < 0 ? `(${Math.abs(pct)}%)` : `${pct}%`);
             });
             rows.push(row);
         });
@@ -820,6 +827,70 @@ async function loadAdminPanel() {
         ? '👑 <strong>Super Admin</strong> — All categories, full role management'
         : `🛡️ <strong>Category Admin</strong> — Managing: <strong>${userProfile.adminCategory}</strong>`;
     usersList.appendChild(banner);
+
+    // ── INACTIVE DEVOTEES SECTION ─────────────────────────
+    // Check last 4 consecutive days (excluding today)
+    const inactiveDays = [];
+    for (let i = 1; i <= 4; i++) inactiveDays.push(localDateStr(i));
+    // inactiveDays = [yesterday, 2 days ago, 3 days ago, 4 days ago]
+
+    const inactiveUsers = [];
+    for (const uDoc of filtered) {
+        const u    = uDoc.data();
+        const sSnap = await uDoc.ref.collection('sadhana').get();
+        const submittedDates = new Set(sSnap.docs.map(d => d.id));
+        // All 4 days must be missing
+        const allMissing = inactiveDays.every(d => !submittedDates.has(d));
+        if (allMissing) {
+            // Find last submitted date
+            const allDates = Array.from(submittedDates).sort((a,b) => b.localeCompare(a));
+            const lastDate = allDates[0] || null;
+            inactiveUsers.push({ id: uDoc.id, name: u.name, level: u.level, lastDate });
+        }
+    }
+    // Sort A to Z
+    inactiveUsers.sort((a,b) => (a.name||'').localeCompare(b.name||''));
+
+    // Build inactive section
+    const inactiveSection = document.createElement('div');
+    inactiveSection.className = 'inactive-section';
+    const count = inactiveUsers.length;
+    const countBadge = count > 0
+        ? `<span class="inactive-badge">${count}</span>`
+        : `<span class="inactive-badge inactive-badge-zero">0</span>`;
+
+    inactiveSection.innerHTML = `
+        <div class="inactive-header" onclick="this.parentElement.classList.toggle('open')">
+            <span>⚠️ Inactive Devotees ${countBadge}
+                <small style="font-weight:400;color:#9ca3af;font-size:11px;margin-left:6px;">(4 consecutive days missing)</small>
+            </span>
+            <span class="inactive-arrow">▼</span>
+        </div>
+        <div class="inactive-body">
+            ${count === 0
+                ? `<div class="inactive-empty">✅ All devotees are up to date!</div>`
+                : inactiveUsers.map(u => {
+                    const lastTxt = u.lastDate
+                        ? `Last entry: ${u.lastDate.split('-').slice(1).join(' ')}`
+                        : 'No entries yet';
+                    const safe = (u.name||'').replace(/\/g,'\\').replace(/'/g,"\'");
+                    return `<div class="inactive-card">
+                        <div class="inactive-card-left">
+                            <span class="inactive-dot">🔴</span>
+                            <div>
+                                <div class="inactive-name">${u.name}</div>
+                                <div class="inactive-meta">${u.level||'Senior Batch'} · ${lastTxt}</div>
+                            </div>
+                        </div>
+                        <div class="inactive-actions">
+                            <button onclick="openUserModal('${u.id}','${safe}')" class="btn-primary btn-sm">History</button>
+                            <button onclick="downloadUserExcel('${u.id}','${safe}')" class="btn-success btn-sm">Excel</button>
+                        </div>
+                    </div>`;
+                }).join('')
+            }
+        </div>`;
+    usersList.appendChild(inactiveSection);
 
     for (const uDoc of filtered) {
         const u     = uDoc.data();
