@@ -61,7 +61,11 @@ function getNRData(date) {
         scores:{ sleep:-5, wakeup:-5, chanting:-5, reading:-5, hearing:-5, service:-5, notes:-5, daySleep:0 }
     };
 }
-
+// ✅ NEW: Check if date is in past
+function isPastDate(dateStr) {
+    const today = localDateStr(0);
+    return dateStr < today;
+}
 // ═══════════════════════════════════════════════════════════
 // 4. EXCEL DOWNLOAD
 // ═══════════════════════════════════════════════════════════
@@ -292,7 +296,7 @@ function loadReports(userId, containerId) {
                 const wk = weeks[wi.label]; let curr = new Date(wi.sunStr);
                 for (let i=0;i<7;i++) {
                     const ds = curr.toISOString().split('T')[0];
-                    if (ds>=APP_START && !wk.data.find(e=>e.id===ds)) { const nr=getNRData(ds); wk.data.push(nr); wk.total+=nr.totalScore; }
+                   if (ds>=APP_START && isPastDate(ds) && !wk.data.find(e=>e.id===ds)) { const nr=getNRData(ds); wk.data.push(nr); wk.total+=nr.totalScore; }
                     curr.setDate(curr.getDate()+1);
                 }
             });
@@ -731,4 +735,33 @@ window.openProfileEdit = () => {
     document.getElementById('profile-exact-rounds').value   = userProfile.exactRounds      || '';
     document.getElementById('cancel-edit').classList.remove('hidden');
     showSection('profile');
+};
+// ═══════════════════════════════════════════════════════════
+// FORGET PASSWORD
+// ═══════════════════════════════════════════════════════════
+window.openForgotPassword = (e) => {
+    e.preventDefault();
+    const email = prompt('Enter your email address to reset password:');
+    if (!email) return;
+    
+    if (!email.includes('@')) {
+        alert('❌ Please enter a valid email address!');
+        return;
+    }
+    
+    if (confirm(`Send password reset email to: ${email}?`)) {
+        auth.sendPasswordResetEmail(email)
+            .then(() => {
+                alert(`✅ Password reset email sent to ${email}!\n\nCheck your inbox and spam folder.\n\nClick the link in the email to reset your password.`);
+            })
+            .catch((error) => {
+                if (error.code === 'auth/user-not-found') {
+                    alert('❌ No account found with this email address!');
+                } else if (error.code === 'auth/invalid-email') {
+                    alert('❌ Invalid email format!');
+                } else {
+                    alert('❌ Error: ' + error.message);
+                }
+            });
+    }
 };
