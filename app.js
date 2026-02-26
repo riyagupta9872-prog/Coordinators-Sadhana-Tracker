@@ -372,6 +372,40 @@ window.downloadMasterReport = async () => {
         });
 
         const ws = XLSX.utils.aoa_to_sheet(rows);
+
+        // Style header row
+        const hCols = rows[0].length;
+        for (let c = 0; c < hCols; c++) {
+            const ref = `${colLetter(c)}1`;
+            styleCell(ws, ref, { bold:true, fill:'1A3C5E', fontColor:'FFFFFF', sz:11, align: c===0 ? 'left' : 'center' });
+        }
+
+        // Style data rows with matching colors
+        for (let r = 1; r < rows.length; r++) {
+            const stripeBg = r % 2 === 0 ? 'F8FAFC' : 'FFFFFF';
+            // Name, level, chanting cols
+            for (let c = 0; c < 3; c++) {
+                const ref = `${colLetter(c)}${r+1}`;
+                styleCell(ws, ref, { fill: stripeBg, align:'left', bold: c===0 });
+            }
+            // Week pct cols
+            for (let c = 3; c < rows[r].length; c++) {
+                const ref  = `${colLetter(c)}${r+1}`;
+                const cell = ws[ref];
+                if (!cell) continue;
+                const raw  = parseInt(String(cell.v).replace('%','').replace('(','').replace(')','')) || 0;
+                const isNeg = String(cell.v).includes('(');
+                const pct  = isNeg ? -Math.abs(raw) : raw;
+                let fill = stripeBg, fontColor = '1A252F'; let bold = false;
+                if (pct < 0)   { fill = 'FFFDE7'; fontColor = 'B91C1C'; bold = true; }
+                else if (pct < 20) { fill = 'FFFDE7'; fontColor = 'B91C1C'; bold = true; }
+                else if (pct >= 70){ fontColor = '15803D'; bold = true; }
+                styleCell(ws, ref, { fill, fontColor, bold, align:'center' });
+            }
+        }
+
+        ws['!cols'] = [{ wch:22 }, { wch:16 }, { wch:12 }, ...Array(allWeeks.length).fill({ wch:18 })];
+
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, 'Master_Report');
         xlsxSave(wb, 'Master_Sadhana_Report.xlsx');
@@ -481,30 +515,50 @@ function loadReports(userId, containerId) {
                 const div    = document.createElement('div'); div.className='week-card';
                 const bodyId = containerId.replace(/[^a-zA-Z0-9]/g,'') + '-wb-' + wi.sunStr;
 
+                // Score cell styling — matches comparative table rules
+                const scoreStyle = (v) => {
+                    if (v < 0)  return 'background:#FFFDE7;color:#b91c1c;font-weight:700;';
+                    if (v < 10) return 'background:#FFFDE7;color:#b91c1c;font-weight:700;';
+                    if (v >= 20) return 'color:#15803d;font-weight:600;';
+                    return 'color:#1a252f;';
+                };
+                const scoreVal = (v) => v < 0 ? `(${v})` : `${v}`;
+
+                // Total score cell styling
+                const totalStyle = (v) => {
+                    if (v < 0)   return 'background:#FFFDE7;color:#b91c1c;font-weight:700;';
+                    if (v < 32)  return 'background:#FFFDE7;color:#b91c1c;font-weight:700;';
+                    if (v >= 112) return 'color:#15803d;font-weight:700;';
+                    return 'font-weight:600;color:#1a252f;';
+                };
+                const totalVal = (v) => v < 0 ? `(${v})` : `${v}`;
+
                 // Build table rows — include edit button for super admin in modal
-                const rowsHtml = wk.data.sort((a,b)=>b.id.localeCompare(a.id)).map(e => {
-                    const isNR  = e.sleepTime === 'NR';
-                    const rs    = isNR ? 'style="background:#fff5f5;"' : '';
-                    const cs    = v => v<0 ? 'style="color:#dc2626;font-weight:700;"' : '';
-                    // Edited badge — show only if this entry was edited
+                const rowsHtml = wk.data.sort((a,b)=>b.id.localeCompare(a.id)).map((e, ri) => {
+                    const isNR     = e.sleepTime === 'NR';
+                    const stripeBg = ri % 2 === 0 ? '#ffffff' : '#f8fafc';
+                    const rowBg    = isNR ? '#fff5f5' : stripeBg;
                     const editedBadge = e.editedAt
                         ? `<span class="edited-badge" onclick="showEditHistory(event,'${e.id}','${userId}')" title="View edit history">✏️</span>`
                         : '';
-                    // Edit button — only super admin, only in admin modal context
                     const editBtn = isSuperAdmin()
                         ? `<button onclick="openEditModal('${userId}','${e.id}')" class="btn-edit-cell" title="Edit this entry">Edit</button>`
                         : '';
-                    return `<tr ${rs}>
-                        <td>${e.id.split('-').slice(1).join('/')}${editedBadge}</td>
-                        <td>${e.sleepTime||'NR'}</td><td ${cs(e.scores?.sleep??0)}>${e.scores?.sleep??0}</td>
-                        <td>${e.wakeupTime||'NR'}</td><td ${cs(e.scores?.wakeup??0)}>${e.scores?.wakeup??0}</td>
-                        <td>${e.chantingTime||'NR'}</td><td ${cs(e.scores?.chanting??0)}>${e.scores?.chanting??0}</td>
-                        <td>${e.readingMinutes||0}m</td><td ${cs(e.scores?.reading??0)}>${e.scores?.reading??0}</td>
-                        <td>${e.hearingMinutes||0}m</td><td ${cs(e.scores?.hearing??0)}>${e.scores?.hearing??0}</td>
-                        <td>${e.serviceMinutes||0}m</td><td ${cs(e.scores?.service??0)}>${e.scores?.service??0}</td>
-                        <td>${e.notesMinutes||0}m</td><td ${cs(e.scores?.notes??0)}>${e.scores?.notes??0}</td>
-                        <td>${e.daySleepMinutes||0}m</td><td ${cs(e.scores?.daySleep??0)}>${e.scores?.daySleep??0}</td>
-                        <td ${cs(e.totalScore??0)}>${e.totalScore??0}</td>
+
+                    const sc = e.scores || {};
+                    const mkS = (v) => `<td style="${scoreStyle(v)}">${scoreVal(v)}</td>`;
+
+                    return `<tr style="background:${rowBg};">
+                        <td style="font-weight:600;">${e.id.split('-').slice(1).join('/')}${editedBadge}</td>
+                        <td style="${isNR?'color:#b91c1c;font-weight:700;':''}">${e.sleepTime||'NR'}</td>${mkS(sc.sleep??0)}
+                        <td style="${isNR?'color:#b91c1c;':''}">${e.wakeupTime||'NR'}</td>${mkS(sc.wakeup??0)}
+                        <td>${e.chantingTime||'NR'}</td>${mkS(sc.chanting??0)}
+                        <td>${e.readingMinutes||0}m</td>${mkS(sc.reading??0)}
+                        <td>${e.hearingMinutes||0}m</td>${mkS(sc.hearing??0)}
+                        <td>${e.serviceMinutes||0}m</td>${mkS(sc.service??0)}
+                        <td>${e.notesMinutes||0}m</td>${mkS(sc.notes??0)}
+                        <td>${e.daySleepMinutes||0}m</td>${mkS(sc.daySleep??0)}
+                        <td style="${totalStyle(e.totalScore??0)}">${totalVal(e.totalScore??0)}</td>
                         <td>${e.dayPercent??0}%</td>
                         ${isSuperAdmin() ? `<td style="padding:2px 4px;">${editBtn}</td>` : ''}
                     </tr>`;
@@ -515,8 +569,8 @@ function loadReports(userId, containerId) {
 
                 div.innerHTML = `
                     <div class="week-header" onclick="document.getElementById('${bodyId}').classList.toggle('open')">
-                        <span>📅 ${wk.range}</span>
-                        <strong style="color:${wk.total<0?'#dc2626':wk.total<300?'#d97706':'#16a34a'}">Score: ${wk.total} ▼</strong>
+                        <span style="white-space:nowrap;">📅 ${wk.range.replace('_',' ')}</span>
+                        <strong style="white-space:nowrap;color:${wk.total<0?'#dc2626':wk.total<300?'#d97706':'#16a34a'}">Score: ${wk.total} ▼</strong>
                     </div>
                     <div class="week-body" id="${bodyId}">
                         <table class="data-table">
@@ -742,11 +796,21 @@ async function loadAdminPanel() {
         .filter(doc => cats.includes(doc.data().level||'Senior Batch'))
         .sort((a,b) => (a.data().name||'').localeCompare(b.data().name||''));
 
-    let tHtml = `<table class="data-table"><thead><tr>
-        <th style="text-align:left;min-width:100px">User</th>
-        <th>Level</th><th>Chanting</th>
-        ${weeks.map(w=>`<th>${w.label.split('_')[0]}</th>`).join('')}
-    </tr></thead><tbody>`;
+    // Color helper for percentage cells
+    const pctStyle = (pct) => {
+        if (pct < 0)   return { bg:'#FFFDE7', color:'#b91c1c', bold:true, text:`(${pct}%)` };
+        if (pct < 20)  return { bg:'#FFFDE7', color:'#b91c1c', bold:true, text:`${pct}%`   };
+        if (pct >= 70) return { bg:'',        color:'#15803d', bold:true, text:`${pct}%`   };
+        return              { bg:'',        color:'#1a252f', bold:false, text:`${pct}%`  };
+    };
+
+    let tHtml = `<table class="comp-table" id="comp-perf-table">
+        <thead><tr>
+            <th class="comp-th comp-th-name">Name</th>
+            <th class="comp-th">Level</th>
+            <th class="comp-th">Chanting</th>
+            ${weeks.map(w=>`<th class="comp-th">${w.label.split('_')[0]}</th>`).join('')}
+        </tr></thead><tbody>`;
 
     usersList.innerHTML = '';
 
@@ -762,10 +826,12 @@ async function loadAdminPanel() {
         const sSnap = await uDoc.ref.collection('sadhana').get();
         const ents  = sSnap.docs.map(d=>({date:d.id, score:d.data().totalScore||0}));
 
-        tHtml += `<tr>
-            <td style="font-weight:600">${u.name}</td>
-            <td style="font-size:11px">${(u.level||'SB').replace(' Coordinator','').replace('Senior Batch','SB')}</td>
-            <td style="font-size:11px">${u.chantingCategory||'N/A'}</td>`;
+        const rowIdx = filtered.indexOf(uDoc);
+        const stripeBg = rowIdx % 2 === 0 ? '#ffffff' : '#f8fafc';
+        tHtml += `<tr style="background:${stripeBg}">
+            <td class="comp-td comp-name">${u.name}</td>
+            <td class="comp-td comp-meta">${(u.level||'SB').replace(' Coordinator','').replace('Senior Batch','SB')}</td>
+            <td class="comp-td comp-meta">${u.chantingCategory||'N/A'}</td>`;
         weeks.forEach(w => {
             let tot=0; let curr=new Date(w.sunStr);
             for (let i=0;i<7;i++) {
@@ -774,8 +840,10 @@ async function loadAdminPanel() {
                 tot+=en?en.score:-35;
                 curr.setDate(curr.getDate()+1);
             }
-            const pct=Math.round((tot/1120)*100);
-            tHtml+=`<td style="font-weight:700;color:${pct<0?'#dc2626':pct<50?'#d97706':'#16a34a'}">${pct}%</td>`;
+            const pct = Math.round((tot/1120)*100);
+            const ps  = pctStyle(pct);
+            const cellBg = ps.bg || stripeBg;
+            tHtml += `<td class="comp-td comp-pct" style="background:${cellBg};color:${ps.color};font-weight:${ps.bold?'700':'400'};">${ps.text}</td>`;
         });
         tHtml += '</tr>';
 
@@ -954,7 +1022,10 @@ window.submitEditSadhana = async () => {
     };
 
     try {
-        await db.collection('users').doc(editModalUserId).collection('sadhana').doc(editModalDate).update({
+        const docRef = db.collection('users').doc(editModalUserId).collection('sadhana').doc(editModalDate);
+
+        // Step 1: Update all field values (serverTimestamp safe here at top level)
+        await docRef.update({
             sleepTime:       slp,
             wakeupTime:      wak,
             chantingTime:    chn,
@@ -967,9 +1038,15 @@ window.submitEditSadhana = async () => {
             totalScore:      total,
             dayPercent:      dayPercent,
             editedAt:        firebase.firestore.FieldValue.serverTimestamp(),
-            editedBy:        userProfile.name,
-            editLog:         firebase.firestore.FieldValue.arrayUnion(editLog)
+            editedBy:        userProfile.name
         });
+
+        // Step 2: Append to editLog array separately
+        // (arrayUnion cannot contain serverTimestamp inside nested objects — so we use ISO string in editLog)
+        await docRef.update({
+            editLog: firebase.firestore.FieldValue.arrayUnion(editLog)
+        });
+
         closeEditModal();
         alert(`✅ Sadhana updated!\nNew Score: ${total} (${dayPercent}%)`);
     } catch (err) {
@@ -978,38 +1055,77 @@ window.submitEditSadhana = async () => {
     }
 };
 
-// Show edit history tooltip/mini modal
+// Show edit history modal — full field-by-field comparison
 window.showEditHistory = async (evt, date, userId) => {
     evt.stopPropagation();
     const docSnap = await db.collection('users').doc(userId).collection('sadhana').doc(date).get();
     if (!docSnap.exists) return;
-    const d   = docSnap.data();
-    const log = d.editLog || [];
+    const cur = docSnap.data();
+    const log = cur.editLog || [];
 
     if (log.length === 0) {
         alert('No edit history found.');
         return;
     }
 
-    // Build history text
-    let msg = `✏️ Edit History — ${date}\n${'─'.repeat(30)}\n`;
+    // Field definitions — label, key in original object, key in current doc
+    const FIELDS = [
+        { label: 'Bed Time',      oKey: 'sleepTime',       cKey: 'sleepTime'       },
+        { label: 'Wake Up',       oKey: 'wakeupTime',      cKey: 'wakeupTime'      },
+        { label: 'Chanting By',   oKey: 'chantingTime',    cKey: 'chantingTime'    },
+        { label: 'Reading (min)', oKey: 'readingMinutes',  cKey: 'readingMinutes'  },
+        { label: 'Hearing (min)', oKey: 'hearingMinutes',  cKey: 'hearingMinutes'  },
+        { label: 'Service (min)', oKey: 'serviceMinutes',  cKey: 'serviceMinutes'  },
+        { label: 'Notes (min)',   oKey: 'notesMinutes',    cKey: 'notesMinutes'    },
+        { label: 'Day Sleep(min)',oKey: 'daySleepMinutes', cKey: 'daySleepMinutes' },
+        { label: 'Total Score',   oKey: 'totalScore',      cKey: 'totalScore'      },
+    ];
+
+    let html = '';
     log.forEach((entry, i) => {
-        // editedAt can be ISO string (from arrayUnion entries) or Firestore Timestamp (top-level)
+        // Parse timestamp
         let ts = 'Unknown time';
         if (entry.editedAt) {
-            const d = typeof entry.editedAt === 'string' ? new Date(entry.editedAt) : entry.editedAt.toDate?.();
-            if (d) ts = d.toLocaleString('en-IN', {day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+            const d = typeof entry.editedAt === 'string'
+                ? new Date(entry.editedAt)
+                : entry.editedAt.toDate?.();
+            if (d) ts = d.toLocaleString('en-IN', {
+                day:'2-digit', month:'short', year:'numeric',
+                hour:'2-digit', minute:'2-digit'
+            });
         }
-        msg += `\n[${i+1}] By: ${entry.editedBy || 'Admin'}\n`;
-        msg += `    On: ${ts}\n`;
-        msg += `    Reason: ${entry.reason || 'Not specified'}\n`;
+
+        html += `<div class="eh-entry">`;
+        html += `<div class="eh-header">✏️ Edit ${i+1} &nbsp;|&nbsp; <span class="eh-who">${entry.editedBy||'Admin'}</span> &nbsp;|&nbsp; <span class="eh-when">${ts}</span></div>`;
+        html += `<div class="eh-reason">📝 ${entry.reason || 'No reason provided'}</div>`;
+
         if (entry.original) {
-            msg += `    Before: Sleep ${entry.original.sleepTime||'NR'} · Wake ${entry.original.wakeupTime||'NR'} · Score ${entry.original.totalScore||0}\n`;
+            const o = entry.original;
+            // Only show fields that actually changed
+            const changedFields = FIELDS.filter(f => {
+                const oval = o[f.oKey] ?? '—';
+                const cval = cur[f.cKey] ?? '—';
+                return String(oval) !== String(cval);
+            });
+
+            if (changedFields.length === 0) {
+                html += `<div class="eh-nochange">No field changes detected in this edit.</div>`;
+            } else {
+                html += `<table class="eh-table"><thead><tr><th>Field</th><th>Before</th><th>After</th></tr></thead><tbody>`;
+                changedFields.forEach(f => {
+                    const oval = o[f.oKey] ?? '—';
+                    const cval = cur[f.cKey] ?? '—';
+                    html += `<tr><td class="eh-field">${f.label}</td><td class="eh-before">${oval}</td><td class="eh-after">${cval}</td></tr>`;
+                });
+                html += `</tbody></table>`;
+            }
+        } else {
+            html += `<div class="eh-nochange">Original data not recorded for this edit.</div>`;
         }
+        html += `</div>`;
     });
 
-    // Show in edit history modal
-    document.getElementById('edit-history-content').textContent = msg;
+    document.getElementById('edit-history-content').innerHTML = html;
     document.getElementById('edit-history-modal').classList.remove('hidden');
 };
 
