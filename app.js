@@ -126,9 +126,16 @@ function styleCell(ws, cellRef, opts = {}) {
     };
 }
 
-// XLSX column index → letter (0=A, 1=B …18=S)
+// XLSX column index → letter(s) (0=A, 25=Z, 26=AA, 27=AB …)
 function colLetter(n) {
-    return String.fromCharCode(65 + n);
+    let s = '';
+    n++;
+    while (n > 0) {
+        const r = (n - 1) % 26;
+        s = String.fromCharCode(65 + r) + s;
+        n = Math.floor((n - 1) / 26);
+    }
+    return s;
 }
 
 window.downloadUserExcel = async (userId, userName) => {
@@ -832,22 +839,11 @@ async function loadAdminPanel() {
     // Check last 4 consecutive days (excluding today)
     const inactiveDays = [];
     for (let i = 1; i <= 4; i++) inactiveDays.push(localDateStr(i));
-    // inactiveDays = [yesterday, 2 days ago, 3 days ago, 4 days ago]
 
+    // We will compute inactive list INSIDE the main user loop below (to avoid double Firestore reads)
     const inactiveUsers = [];
-    for (const uDoc of filtered) {
-        const u    = uDoc.data();
-        const sSnap = await uDoc.ref.collection('sadhana').get();
-        const submittedDates = new Set(sSnap.docs.map(d => d.id));
-        // All 4 days must be missing
-        const allMissing = inactiveDays.every(d => !submittedDates.has(d));
-        if (allMissing) {
-            // Find last submitted date
-            const allDates = Array.from(submittedDates).sort((a,b) => b.localeCompare(a));
-            const lastDate = allDates[0] || null;
-            inactiveUsers.push({ id: uDoc.id, name: u.name, level: u.level, lastDate });
-        }
-    }
+    const userSadhanaCache = new Map(); // uid → entries array (reuse in comparative table)
+
     // Sort A to Z
     inactiveUsers.sort((a,b) => (a.name||'').localeCompare(b.name||''));
 
@@ -873,7 +869,7 @@ async function loadAdminPanel() {
                     const lastTxt = u.lastDate
                         ? `Last entry: ${u.lastDate.split('-').slice(1).join(' ')}`
                         : 'No entries yet';
-                    const safe = (u.name||'').replace(/\/g,'\\').replace(/'/g,"\'");
+                    const safe = (u.name||'').replace(/'/g,"\'");
                     return `<div class="inactive-card">
                         <div class="inactive-card-left">
                             <span class="inactive-dot">🔴</span>
@@ -896,6 +892,16 @@ async function loadAdminPanel() {
         const u     = uDoc.data();
         const sSnap = await uDoc.ref.collection('sadhana').get();
         const ents  = sSnap.docs.map(d=>({date:d.id, score:d.data().totalScore||0}));
+        userSadhanaCache.set(uDoc.id, ents);
+
+        // Check inactive: all 4 days missing (only count from APP_START onward)
+        const submittedDates = new Set(sSnap.docs.map(d => d.id).filter(d => d >= APP_START));
+        const allMissing = inactiveDays.every(d => !submittedDates.has(d));
+        if (allMissing) {
+            const allDates = Array.from(submittedDates).sort((a,b) => b.localeCompare(a));
+            const lastDate = allDates[0] || null;
+            inactiveUsers.push({ id: uDoc.id, name: u.name, level: u.level, lastDate });
+        }
 
         const rowIdx = filtered.indexOf(uDoc);
         const stripeBg = rowIdx % 2 === 0 ? '#ffffff' : '#f8fafc';
