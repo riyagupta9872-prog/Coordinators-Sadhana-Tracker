@@ -114,8 +114,6 @@
         <p style="text-align:center;margin-top:12px;">
             <a href="#" onclick="openForgotPassword(event)" style="color:var(--secondary);font-size:13px;text-decoration:none;">Forgot Password?</a>
         </p>
-        <button onclick="window.location.href='signup.html'" class="btn-success">Create Account</button>
-        <button onclick="window.location.href='signup.html'" class="btn-success">Create Account</button>
         <p style="text-align:center;margin-top:14px;font-size:13px;color:var(--muted);">
             New here? <a href="signup.html" style="color:var(--secondary);font-weight:600;">Sign Up</a>
         </p>
@@ -131,7 +129,7 @@
 
             <label class="form-label">Position Level</label>
             <select id="profile-level" required>
-                <option value="">Select your position</option>
+                <option value="" disabled selected>Select your position</option>
                 <option value="Senior Batch">Senior Batch</option>
                 <option value="IGF & IYF Coordinator">IGF & IYF Coordinator</option>
                 <option value="ICF Coordinator">ICF Coordinator</option>
@@ -139,7 +137,7 @@
 
             <label class="form-label">Chanting Category</label>
             <select id="profile-chanting" required>
-                <option value="">Select chanting level</option>
+                <option value="" disabled selected>Select chanting level</option>
                 <option value="Level-1">Level-1 (1–4 Rounds)</option>
                 <option value="Level-2">Level-2 (5–8 Rounds)</option>
                 <option value="Level-3">Level-3 (9–15 Rounds)</option>
