@@ -371,9 +371,12 @@ data.push(entry ? entry.score : -35);
             const wi = getWeekInfo(d.toISOString().split('T')[0]);
             if (wi.sunStr < APP_START) continue;
             let tot = 0; let curr = new Date(wi.sunStr);
+            const todayStr = localDateStr(0);
             for (let j=0;j<7;j++) {
                 const ds = curr.toISOString().split('T')[0];
+                if (ds > todayStr) { curr.setDate(curr.getDate()+1); continue; }
                 const en = allEntries.find(e=>e.date===ds);
+                if (ds === todayStr && !en) { curr.setDate(curr.getDate()+1); continue; }
                 tot += en ? en.score : -35;
                 curr.setDate(curr.getDate()+1);
             }
