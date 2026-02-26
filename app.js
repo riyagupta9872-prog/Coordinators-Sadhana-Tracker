@@ -305,7 +305,7 @@ function loadReports(userId, containerId) {
             weeksList.forEach(wi => {
                 const wk  = weeks[wi.label];
                 const div = document.createElement('div'); div.className='week-card';
-                const bodyId = 'wb-'+wi.sunStr;
+               const bodyId = containerId.replace(/[^a-zA-Z0-9]/g,'') + '-wb-' + wi.sunStr;
                 div.innerHTML = `
                     <div class="week-header" onclick="document.getElementById('${bodyId}').classList.toggle('open')">
                         <span>📅 ${wk.range}</span>
@@ -357,8 +357,9 @@ async function fetchChartData(userId, view) {
             const ds = localDateStr(i);
             if (ds < APP_START) continue;
             const entry = allEntries.find(e => e.date === ds);
-            labels.push(ds.split('-').slice(1).join('/'));
-            data.push(entry ? entry.score : -35);
+if (i === 0 && !entry) continue;
+labels.push(ds.split('-').slice(1).join('/'));
+data.push(entry ? entry.score : -35);
         }
         return { labels, data, label:'Daily Score', max:160, color:'#3498db' };
     }
