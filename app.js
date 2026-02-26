@@ -931,15 +931,18 @@ window.submitEditSadhana = async () => {
     const { sc, total, dayPercent } = calculateScores(slp, wak, chn, rMin, hMin, sMin, nMin, dsMin, level);
 
     // Build edit log entry — store original data
+    // NOTE: serverTimestamp() cannot be used inside arrayUnion nested objects
+    // So we use JS Date string for the log entry timestamp instead
+    const now = new Date().toISOString();
     const editLog = {
         editedBy:    userProfile.name,
         editedByUid: currentUser.uid,
-        editedAt:    firebase.firestore.FieldValue.serverTimestamp(),
+        editedAt:    now,
         reason:      reason || 'No reason provided',
         original: {
-            sleepTime:       editModalOriginal.sleepTime,
-            wakeupTime:      editModalOriginal.wakeupTime,
-            chantingTime:    editModalOriginal.chantingTime,
+            sleepTime:       editModalOriginal.sleepTime       || 'NR',
+            wakeupTime:      editModalOriginal.wakeupTime      || 'NR',
+            chantingTime:    editModalOriginal.chantingTime    || 'NR',
             readingMinutes:  editModalOriginal.readingMinutes  || 0,
             hearingMinutes:  editModalOriginal.hearingMinutes  || 0,
             serviceMinutes:  editModalOriginal.serviceMinutes  || 0,
@@ -950,25 +953,29 @@ window.submitEditSadhana = async () => {
         }
     };
 
-    await db.collection('users').doc(editModalUserId).collection('sadhana').doc(editModalDate).update({
-        sleepTime:       slp,
-        wakeupTime:      wak,
-        chantingTime:    chn,
-        readingMinutes:  rMin,
-        hearingMinutes:  hMin,
-        serviceMinutes:  sMin,
-        notesMinutes:    nMin,
-        daySleepMinutes: dsMin,
-        scores:          sc,
-        totalScore:      total,
-        dayPercent:      dayPercent,
-        editedAt:        firebase.firestore.FieldValue.serverTimestamp(),
-        editedBy:        userProfile.name,
-        editLog:         firebase.firestore.FieldValue.arrayUnion(editLog)
-    });
-
-    alert(`✅ Sadhana updated!\nNew Score: ${total} (${dayPercent}%)`);
-    closeEditModal();
+    try {
+        await db.collection('users').doc(editModalUserId).collection('sadhana').doc(editModalDate).update({
+            sleepTime:       slp,
+            wakeupTime:      wak,
+            chantingTime:    chn,
+            readingMinutes:  rMin,
+            hearingMinutes:  hMin,
+            serviceMinutes:  sMin,
+            notesMinutes:    nMin,
+            daySleepMinutes: dsMin,
+            scores:          sc,
+            totalScore:      total,
+            dayPercent:      dayPercent,
+            editedAt:        firebase.firestore.FieldValue.serverTimestamp(),
+            editedBy:        userProfile.name,
+            editLog:         firebase.firestore.FieldValue.arrayUnion(editLog)
+        });
+        closeEditModal();
+        alert(`✅ Sadhana updated!\nNew Score: ${total} (${dayPercent}%)`);
+    } catch (err) {
+        console.error('Edit save error:', err);
+        alert('❌ Save failed: ' + err.message);
+    }
 };
 
 // Show edit history tooltip/mini modal
@@ -987,9 +994,12 @@ window.showEditHistory = async (evt, date, userId) => {
     // Build history text
     let msg = `✏️ Edit History — ${date}\n${'─'.repeat(30)}\n`;
     log.forEach((entry, i) => {
-        const ts = entry.editedAt?.toDate
-            ? entry.editedAt.toDate().toLocaleString('en-IN', {day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})
-            : 'Unknown time';
+        // editedAt can be ISO string (from arrayUnion entries) or Firestore Timestamp (top-level)
+        let ts = 'Unknown time';
+        if (entry.editedAt) {
+            const d = typeof entry.editedAt === 'string' ? new Date(entry.editedAt) : entry.editedAt.toDate?.();
+            if (d) ts = d.toLocaleString('en-IN', {day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+        }
         msg += `\n[${i+1}] By: ${entry.editedBy || 'Admin'}\n`;
         msg += `    On: ${ts}\n`;
         msg += `    Reason: ${entry.reason || 'Not specified'}\n`;
