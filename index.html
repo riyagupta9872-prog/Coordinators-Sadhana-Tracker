@@ -69,7 +69,8 @@
         /* Modals */
         .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.72); display: flex; justify-content: center; align-items: center; z-index: 999; padding: 16px; }
         .modal-box { background: white; width: 100%; max-width: 900px; padding: 24px; border-radius: 14px; max-height: 92vh; overflow-y: auto; position: relative; }
-        .modal-box.sm { max-width: 420px; }
+        .modal-box.sm  { max-width: 420px; }
+        .modal-box.md  { max-width: 540px; }
         .modal-close { position: absolute; right: 16px; top: 12px; font-size: 24px; cursor: pointer; color: #aaa; background: none; border: none; width: auto; padding: 4px 8px; margin: 0; line-height: 1; }
         .modal-close:hover { color: #333; transform: none; }
         .modal-title { font-size: 17px; font-weight: 700; color: var(--primary); margin: 0 0 18px; padding-right: 30px; }
@@ -98,6 +99,47 @@
 
         /* Section divider in profile */
         hr.section-hr { border: none; border-top: 1px dashed #e0e0e0; margin: 20px 0; }
+
+        /* ── EDIT BUTTON in table rows ── */
+        .btn-edit-cell {
+            width: auto !important; padding: 3px 9px !important; font-size: 11px !important;
+            margin: 0 !important; background: #f39c12 !important; color: white !important;
+            border-radius: 5px !important; font-weight: 600 !important;
+        }
+        .btn-edit-cell:hover { background: #d68910 !important; }
+
+        /* ── EDITED BADGE (✏️ indicator) ── */
+        .edited-badge {
+            display: inline-block; cursor: pointer; font-size: 11px;
+            margin-left: 4px; vertical-align: middle;
+            opacity: 0.75; transition: opacity 0.15s;
+        }
+        .edited-badge:hover { opacity: 1; }
+
+        /* ── EDIT SADHANA MODAL fields ── */
+        .edit-field-group { margin-bottom: 12px; }
+        .edit-field-group label { font-weight: 600; font-size: 13px; color: #444; display: block; margin-bottom: 3px; }
+        .edit-field-group input { margin: 0; }
+        .edit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .edit-score-preview {
+            text-align: center; font-size: 15px; font-weight: 700;
+            padding: 10px; border-radius: 8px; background: #f8f9fa;
+            margin: 14px 0; color: #27ae60;
+        }
+        .edit-reason-group { margin: 12px 0; }
+        .edit-reason-group label { font-weight: 600; font-size: 13px; color: #444; display: block; margin-bottom: 4px; }
+        .edit-reason-group textarea {
+            width: 100%; padding: 9px 12px; border: 1px solid #ddd; border-radius: 8px;
+            font-size: 13px; resize: vertical; min-height: 60px; font-family: inherit;
+        }
+
+        /* ── EDIT HISTORY MODAL ── */
+        .edit-history-pre {
+            background: #f8f9fa; border-radius: 8px; padding: 14px;
+            font-family: monospace; font-size: 12px; line-height: 1.7;
+            white-space: pre-wrap; word-break: break-word; color: #2c3e50;
+            max-height: 60vh; overflow-y: auto; border: 1px solid #e0e0e0;
+        }
     </style>
 </head>
 <body>
@@ -131,7 +173,7 @@
             <select id="profile-level" required>
                 <option value="" disabled selected>Select your position</option>
                 <option value="Senior Batch">Senior Batch</option>
-                <option value="IGF & IYF Coordinator">IGF & IYF Coordinator</option>
+                <option value="IGF & IYF Coordinator">IGF &amp; IYF Coordinator</option>
                 <option value="ICF Coordinator">ICF Coordinator</option>
             </select>
 
@@ -147,7 +189,7 @@
             <label class="form-label">Current Exact Rounds</label>
             <input type="number" id="profile-exact-rounds" placeholder="e.g. 12" required>
 
-            <button type="submit" class="btn-success" style="margin-top:16px;">Save & Continue</button>
+            <button type="submit" class="btn-success" style="margin-top:16px;">Save &amp; Continue</button>
             <button type="button" onclick="showSection('dashboard')" id="cancel-edit" class="btn-gray hidden">Cancel</button>
         </form>
     </section>
@@ -228,9 +270,9 @@
             <div class="card">
                 <h3 style="margin:0 0 14px;color:var(--primary);font-size:16px;">My Progress</h3>
                 <div class="chart-tabs">
-                    <button class="chart-tab-btn active" onclick="setChartView('daily', this, currentUser.uid, userProfile.name)">Daily</button>
-                    <button class="chart-tab-btn"        onclick="setChartView('weekly', this, currentUser.uid, userProfile.name)">Weekly</button>
-                    <button class="chart-tab-btn"        onclick="setChartView('monthly', this, currentUser.uid, userProfile.name)">Monthly</button>
+                    <button class="chart-tab-btn active" onclick="setChartView('daily', this)">Daily</button>
+                    <button class="chart-tab-btn"        onclick="setChartView('weekly', this)">Weekly</button>
+                    <button class="chart-tab-btn"        onclick="setChartView('monthly', this)">Monthly</button>
                 </div>
                 <div class="chart-container"><canvas id="my-progress-chart"></canvas></div>
                 <p style="font-size:11px;color:var(--muted);text-align:center;margin-top:8px;">Daily max: 160 · Weekly max: 1120</p>
@@ -254,10 +296,12 @@
             </div>
         </div>
 
-    </section><!-- end dashboard -->
-</div><!-- end container -->
+    </section>
+</div>
 
-<!-- ══ MODAL: User History ══ -->
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- MODAL: User History                                    -->
+<!-- ══════════════════════════════════════════════════════ -->
 <div id="user-report-modal" class="modal-overlay hidden">
     <div class="modal-box">
         <button class="modal-close" onclick="closeUserModal()">×</button>
@@ -266,7 +310,9 @@
     </div>
 </div>
 
-<!-- ══ MODAL: Progress Chart (Admin view) ══ -->
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- MODAL: Progress Chart                                  -->
+<!-- ══════════════════════════════════════════════════════ -->
 <div id="progress-modal" class="modal-overlay hidden">
     <div class="modal-box">
         <button class="modal-close" onclick="closeProgressModal()">×</button>
@@ -281,7 +327,9 @@
     </div>
 </div>
 
-<!-- ══ MODAL: Change Password ══ -->
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- MODAL: Change Password                                 -->
+<!-- ══════════════════════════════════════════════════════ -->
 <div id="password-modal" class="modal-overlay hidden">
     <div class="modal-box sm">
         <button class="modal-close" onclick="closePasswordModal()">×</button>
@@ -296,6 +344,80 @@
         </div>
         <button onclick="submitPasswordChange()" class="btn-primary" style="margin-top:6px;">Update Password</button>
         <button onclick="closePasswordModal()" class="btn-gray">Cancel</button>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- MODAL: Edit Sadhana (Super Admin only)                 -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div id="edit-sadhana-modal" class="modal-overlay hidden">
+    <div class="modal-box md">
+        <button class="modal-close" onclick="closeEditModal()">×</button>
+        <div class="modal-title" id="edit-modal-title">✏️ Edit Sadhana</div>
+
+        <!-- Hidden: user level for scoring context -->
+        <input type="hidden" id="edit-user-level">
+
+        <div class="edit-grid">
+            <div class="edit-field-group">
+                <label>Bed Time (Night)</label>
+                <input type="time" id="edit-sleep-time" oninput="updateEditPreview()">
+            </div>
+            <div class="edit-field-group">
+                <label>Wake Up Time</label>
+                <input type="time" id="edit-wakeup-time" oninput="updateEditPreview()">
+            </div>
+            <div class="edit-field-group">
+                <label>Chanting Completed By</label>
+                <input type="time" id="edit-chanting-time" oninput="updateEditPreview()">
+            </div>
+            <div class="edit-field-group">
+                <label>Day Sleep (mins)</label>
+                <input type="number" id="edit-day-sleep-mins" min="0" oninput="updateEditPreview()">
+            </div>
+            <div class="edit-field-group">
+                <label>Reading (mins)</label>
+                <input type="number" id="edit-reading-mins" min="0" oninput="updateEditPreview()">
+            </div>
+            <div class="edit-field-group">
+                <label>Hearing (mins)</label>
+                <input type="number" id="edit-hearing-mins" min="0" oninput="updateEditPreview()">
+            </div>
+            <div class="edit-field-group">
+                <label>Service / Seva (mins)</label>
+                <input type="number" id="edit-service-mins" min="0" oninput="updateEditPreview()">
+            </div>
+            <div class="edit-field-group" id="edit-notes-row">
+                <label>Notes Revision (mins)</label>
+                <input type="number" id="edit-notes-mins" min="0" oninput="updateEditPreview()">
+            </div>
+        </div>
+
+        <!-- Live score preview -->
+        <div class="edit-score-preview" id="edit-score-preview">Score will appear here</div>
+
+        <!-- Reason for edit -->
+        <div class="edit-reason-group">
+            <label>Reason for Edit <span style="color:#aaa;font-weight:400;">(optional but recommended)</span></label>
+            <textarea id="edit-reason" placeholder="e.g. User entered 11:00 instead of 23:00 for bed time"></textarea>
+        </div>
+
+        <button onclick="submitEditSadhana()" class="btn-warning" style="margin-top:4px;">
+            💾 Save Changes
+        </button>
+        <button onclick="closeEditModal()" class="btn-gray">Cancel</button>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- MODAL: Edit History Viewer                             -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div id="edit-history-modal" class="modal-overlay hidden">
+    <div class="modal-box sm">
+        <button class="modal-close" onclick="closeEditHistoryModal()">×</button>
+        <div class="modal-title">✏️ Edit History</div>
+        <pre class="edit-history-pre" id="edit-history-content"></pre>
+        <button onclick="closeEditHistoryModal()" class="btn-gray" style="margin-top:12px;">Close</button>
     </div>
 </div>
 
