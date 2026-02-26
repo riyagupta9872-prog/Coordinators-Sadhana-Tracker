@@ -14,9 +14,9 @@ const auth = firebase.auth();
 const db   = firebase.firestore();
 db.settings({ experimentalAutoDetectLongPolling: true, merge: true });
 
-let currentUser   = null;
-let userProfile   = null;
-let activeListener= null;
+let currentUser    = null;
+let userProfile    = null;
+let activeListener = null;
 
 // ═══════════════════════════════════════════════════════════
 // 2. ROLE HELPERS
@@ -61,17 +61,42 @@ function getNRData(date) {
         scores:{ sleep:-5, wakeup:-5, chanting:-5, reading:-5, hearing:-5, service:-5, notes:-5, daySleep:0 }
     };
 }
-// ✅ NEW: Check if date is in past
+
 function isPastDate(dateStr) {
-    const today = localDateStr(0);
-    return dateStr < today;
+    return dateStr < localDateStr(0);
 }
+
+// ─── SCORING ENGINE (shared between submit & edit) ───────
+function calculateScores(slp, wak, chn, rMin, hMin, sMin, nMin, dsMin, level) {
+    const sc = { sleep:-5, wakeup:-5, chanting:-5, reading:-5, hearing:-5, service:-5, notes:-5, daySleep:0 };
+    const slpM = t2m(slp, true);
+    sc.sleep = slpM<=1350?25:slpM<=1355?20:slpM<=1360?15:slpM<=1365?10:slpM<=1370?5:slpM<=1375?0:-5;
+    const wakM = t2m(wak);
+    sc.wakeup = wakM<=305?25:wakM<=310?20:wakM<=315?15:wakM<=320?10:wakM<=325?5:wakM<=330?0:-5;
+    const chnM = t2m(chn);
+    sc.chanting = chnM<=540?25:chnM<=570?20:chnM<=660?15:chnM<=870?10:chnM<=1020?5:chnM<=1140?0:-5;
+    sc.daySleep = dsMin<=60?10:-5;
+    const act = (m,thr) => m>=thr?25:m>=thr-10?20:m>=20?15:m>=15?10:m>=10?5:m>=5?0:-5;
+    const isSB = level === 'Senior Batch';
+    sc.reading  = act(rMin, isSB?40:30);
+    sc.hearing  = act(hMin, isSB?40:30);
+    let total = sc.sleep + sc.wakeup + sc.chanting + sc.reading + sc.hearing + sc.daySleep;
+    if (isSB) {
+        sc.service = sMin>=15?10:sMin>=10?5:sMin>=5?0:-5;
+        sc.notes   = nMin>=20?15:nMin>=15?10:nMin>=10?5:nMin>=5?0:-5;
+        total += sc.service + sc.notes;
+    } else {
+        sc.service = act(sMin, 30);
+        sc.notes   = 0;
+        total += sc.service;
+    }
+    return { sc, total, dayPercent: Math.round((total/160)*100) };
+}
+
 // ═══════════════════════════════════════════════════════════
-// 4. EXCEL DOWNLOAD
+// 4. EXCEL DOWNLOAD  (with profile header + formatting)
 // ═══════════════════════════════════════════════════════════
 function xlsxSave(wb, filename) {
-    // Primary: XLSX.writeFile (works on desktop & https hosted)
-    // Fallback: Blob download (works on Android/mobile browsers)
     try {
         XLSX.writeFile(wb, filename);
     } catch (e) {
@@ -85,9 +110,34 @@ function xlsxSave(wb, filename) {
     }
 }
 
+// Helper: set cell style (bold, fill, font color, alignment, border)
+function styleCell(ws, cellRef, opts = {}) {
+    if (!ws[cellRef]) ws[cellRef] = { v:'', t:'s' };
+    ws[cellRef].s = {
+        font:      { bold: opts.bold||false, color: opts.fontColor ? {rgb: opts.fontColor} : undefined, sz: opts.sz||11 },
+        fill:      opts.fill ? { fgColor: {rgb: opts.fill}, patternType:'solid' } : undefined,
+        alignment: { horizontal: opts.align||'center', vertical:'center', wrapText: false },
+        border: {
+            top:    { style:'thin', color:{rgb:'CCCCCC'} },
+            bottom: { style:'thin', color:{rgb:'CCCCCC'} },
+            left:   { style:'thin', color:{rgb:'CCCCCC'} },
+            right:  { style:'thin', color:{rgb:'CCCCCC'} }
+        }
+    };
+}
+
+// XLSX column index → letter (0=A, 1=B …18=S)
+function colLetter(n) {
+    return String.fromCharCode(65 + n);
+}
+
 window.downloadUserExcel = async (userId, userName) => {
     if (typeof XLSX === 'undefined') { alert('Excel library not loaded. Please refresh.'); return; }
     try {
+        // Fetch user profile
+        const uDoc = await db.collection('users').doc(userId).get();
+        const uData = uDoc.exists ? uDoc.data() : {};
+
         const snap = await db.collection('users').doc(userId).collection('sadhana').get();
         if (snap.empty) { alert('No sadhana data found for this user.'); return; }
 
@@ -100,12 +150,37 @@ window.downloadUserExcel = async (userId, userName) => {
 
         const sortedWeeks = Object.keys(weeksData).sort((a,b) => b.localeCompare(a));
         const DAY = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-        const dataArray = [];
+        const COLS = 19; // A to S
+
+        // ── PROFILE HEADER (rows 0-6) ─────────────────────
+        const today = new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
+        const profileRows = [
+            ['SADHANA TRACKER — INDIVIDUAL REPORT', ...Array(COLS-1).fill('')],
+            ['', ...Array(COLS-1).fill('')],
+            ['Name',          uData.name            || userName, ...Array(COLS-2).fill('')],
+            ['Position Level',uData.level           || 'N/A',    ...Array(COLS-2).fill('')],
+            ['Chanting Level',uData.chantingCategory|| 'N/A',    ...Array(COLS-2).fill('')],
+            ['Exact Rounds',  uData.exactRounds     || 'N/A',    ...Array(COLS-2).fill('')],
+            ['Downloaded On', today,                              ...Array(COLS-2).fill('')],
+            ['', ...Array(COLS-1).fill('')],  // spacer
+        ];
+
+        const dataArray = [...profileRows];
+        const PROFILE_ROWS = profileRows.length; // = 8
+
+        // Track row positions for styling
+        const styleMap = {}; // rowIndex → 'weekHeader' | 'colHeader' | 'total' | 'summary' | 'data' | 'nr'
 
         sortedWeeks.forEach((sunStr, wi) => {
-            const week = weeksData[sunStr];
-            dataArray.push([`WEEK: ${week.label}`,'','','','','','','','','','','','','','','','','','']);
-            dataArray.push(['Date','Bed','M','Wake','M','Chant','M','Read(m)','M','Hear(m)','M','Seva(m)','M','Notes(m)','M','Day Sleep(m)','M','Total','%']);
+            const week   = weeksData[sunStr];
+            const wRow   = dataArray.length; // week header row
+
+            dataArray.push([`WEEK: ${week.label}`,...Array(COLS-1).fill('')]);
+            styleMap[wRow] = 'weekHeader';
+
+            const chRow  = dataArray.length; // column header row
+            dataArray.push(['Date','Bed','M','Wake','M','Chant','M','Read(m)','M','Hear(m)','M','Seva(m)','M','Notes(m)','M','DaySleep(m)','M','Total','%']);
+            styleMap[chRow] = 'colHeader';
 
             let T = { sl:0,wu:0,ch:0,rd:0,hr:0,sv:0,nt:0,ds:0, rdm:0,hrm:0,svm:0,ntm:0,dsm:0, tot:0 };
             const wStart = new Date(week.sunStr);
@@ -115,15 +190,17 @@ window.downloadUserExcel = async (userId, userName) => {
                 const ds  = cd.toISOString().split('T')[0];
                 const lbl = `${DAY[i]} ${String(cd.getDate()).padStart(2,'0')}`;
                 const e   = week.days[ds] || getNRData(ds);
+                const dRow = dataArray.length;
 
                 T.sl+=e.scores?.sleep??0; T.wu+=e.scores?.wakeup??0; T.ch+=e.scores?.chanting??0;
                 T.rd+=e.scores?.reading??0; T.hr+=e.scores?.hearing??0; T.sv+=e.scores?.service??0;
-                T.nt+=e.scores?.notes??0; T.ds+=e.scores?.daySleep??0;
+                T.nt+=e.scores?.notes??0;  T.ds+=e.scores?.daySleep??0;
                 T.rdm+=e.readingMinutes||0; T.hrm+=e.hearingMinutes||0;
                 T.svm+=e.serviceMinutes||0; T.ntm+=e.notesMinutes||0;
                 T.dsm+=e.daySleepMinutes||0; T.tot+=e.totalScore??0;
 
-                dataArray.push([lbl,
+                dataArray.push([
+                    lbl,
                     e.sleepTime||'NR',    e.scores?.sleep??0,
                     e.wakeupTime||'NR',   e.scores?.wakeup??0,
                     e.chantingTime||'NR', e.scores?.chanting??0,
@@ -134,23 +211,119 @@ window.downloadUserExcel = async (userId, userName) => {
                     e.daySleepMinutes||0, e.scores?.daySleep??0,
                     e.totalScore??0, (e.dayPercent??0)+'%'
                 ]);
+                styleMap[dRow] = (e.sleepTime === 'NR') ? 'nr' : 'data';
             }
 
-            const pct = Math.round((T.tot/1120)*100);
-            dataArray.push(['WEEKLY TOTAL','',T.sl,'',T.wu,'',T.ch, T.rdm,T.rd, T.hrm,T.hr, T.svm,T.sv, T.ntm,T.nt, T.dsm,T.ds, T.tot, pct+'%']);
-            dataArray.push([`WEEKLY PERCENTAGE: ${T.tot} / 1120 = ${pct}%`,'','','','','','','','','','','','','','','','','','']);
-            if (wi < sortedWeeks.length-1) { dataArray.push([]); dataArray.push([]); }
+            const pct     = Math.round((T.tot/1120)*100);
+            const totRow  = dataArray.length;
+            dataArray.push(['WEEKLY TOTAL','',T.sl,'',T.wu,'',T.ch,T.rdm,T.rd,T.hrm,T.hr,T.svm,T.sv,T.ntm,T.nt,T.dsm,T.ds,T.tot,pct+'%']);
+            styleMap[totRow] = 'total';
+
+            const sumRow  = dataArray.length;
+            dataArray.push([`WEEKLY %: ${T.tot} / 1120 = ${pct}%`,...Array(COLS-1).fill('')]);
+            styleMap[sumRow] = 'summary';
+
+            if (wi < sortedWeeks.length-1) {
+                dataArray.push(Array(COLS).fill(''));
+                dataArray.push(Array(COLS).fill(''));
+            }
         });
 
+        // ── BUILD WORKSHEET ───────────────────────────────
         const ws = XLSX.utils.aoa_to_sheet(dataArray);
-        const merges = []; let row = 0;
-        sortedWeeks.forEach(() => {
-            merges.push({s:{r:row,c:0},e:{r:row,c:18}});
-            merges.push({s:{r:row+9,c:0},e:{r:row+9,c:18}});
-            row += 12;
+
+        // Column widths
+        ws['!cols'] = [10,8,4,8,4,8,4,9,4,9,4,9,4,9,4,11,4,8,6].map(w=>({wch:w}));
+
+        // ── MERGES ────────────────────────────────────────
+        const merges = [];
+        // Profile title spans all columns
+        merges.push({s:{r:0,c:0}, e:{r:0,c:COLS-1}});
+        // Profile rows: label in col 0, value merged cols 1-18
+        for (let r=2;r<=6;r++) merges.push({s:{r,c:1}, e:{r,c:COLS-1}});
+
+        // Week & summary row merges
+        Object.entries(styleMap).forEach(([rStr, type]) => {
+            const r = parseInt(rStr);
+            if (type==='weekHeader' || type==='summary') {
+                merges.push({s:{r,c:0}, e:{r,c:COLS-1}});
+            }
         });
         ws['!merges'] = merges;
-        ws['!cols'] = [10,8,4,8,4,8,4,10,4,10,4,10,4,10,4,12,4,8,6].map(w=>({wch:w}));
+
+        // ── CELL STYLES ───────────────────────────────────
+        // Profile title
+        styleCell(ws, 'A1', { bold:true, fill:'1A3C5E', fontColor:'FFFFFF', sz:13, align:'center' });
+
+        // Profile label cells (col A, rows 3-7)
+        for (let r=2;r<=6;r++) {
+            styleCell(ws, `A${r+1}`, { bold:true, fill:'EBF3FB', align:'left' });
+            styleCell(ws, `B${r+1}`, { align:'left' });
+        }
+
+        // Data rows styling
+        Object.entries(styleMap).forEach(([rStr, type]) => {
+            const r    = parseInt(rStr);
+            const rNum = r + 1; // 1-indexed for cell refs
+
+            if (type === 'weekHeader') {
+                for (let c=0;c<COLS;c++) {
+                    const ref = `${colLetter(c)}${rNum}`;
+                    styleCell(ws, ref, { bold:true, fill:'1A3C5E', fontColor:'FFFFFF', sz:12, align:'center' });
+                }
+            } else if (type === 'colHeader') {
+                for (let c=0;c<COLS;c++) {
+                    const ref = `${colLetter(c)}${rNum}`;
+                    styleCell(ws, ref, { bold:true, fill:'2E86C1', fontColor:'FFFFFF', sz:10, align:'center' });
+                }
+            } else if (type === 'total') {
+                for (let c=0;c<COLS;c++) {
+                    const ref = `${colLetter(c)}${rNum}`;
+                    styleCell(ws, ref, { bold:true, fill:'D5E8F7', align:'center' });
+                }
+            } else if (type === 'summary') {
+                for (let c=0;c<COLS;c++) {
+                    const ref = `${colLetter(c)}${rNum}`;
+                    styleCell(ws, ref, { bold:true, fill:'EBF3FB', fontColor:'1A3C5E', align:'center' });
+                }
+            } else if (type === 'nr') {
+                // NR row — light red background
+                for (let c=0;c<COLS;c++) {
+                    const ref = `${colLetter(c)}${rNum}`;
+                    styleCell(ws, ref, { fill:'FDE8E8', fontColor:'C0392B', align:'center' });
+                }
+                // Date col left aligned
+                if (ws[`A${rNum}`]) ws[`A${rNum}`].s.alignment.horizontal = 'left';
+            } else if (type === 'data') {
+                // Date col
+                styleCell(ws, `A${rNum}`, { align:'left' });
+                // Score columns (M cols): C,E,G,I,K,M,O,Q = col indices 2,4,6,8,10,12,14,16
+                const scoreCols = [2,4,6,8,10,12,14,16];
+                for (let c=0;c<COLS;c++) {
+                    const ref  = `${colLetter(c)}${rNum}`;
+                    const cell = ws[ref];
+                    if (!cell) continue;
+                    if (scoreCols.includes(c) || c===17) {
+                        // Score cell — conditional color
+                        const val = typeof cell.v === 'number' ? cell.v : parseFloat(cell.v)||0;
+                        const fill  = val >= 20 ? 'D5F5E3'   // green
+                                    : val >= 10 ? 'FEF9E7'   // yellow
+                                    : val >=  0 ? 'FAD7A0'   // orange
+                                    :             'FADBD8';   // red
+                        const fColor = val < 0 ? 'C0392B' : '1A252F';
+                        styleCell(ws, ref, { fill, fontColor:fColor, align:'center' });
+                    } else {
+                        styleCell(ws, ref, { align:'center' });
+                    }
+                }
+                // Total col (R=index 17) — bold
+                const totRef = `R${rNum}`;
+                if (ws[totRef]) ws[totRef].s.font.bold = true;
+            }
+        });
+
+        // Freeze top 8 rows (profile) + column A
+        ws['!freeze'] = { xSplit:1, ySplit:PROFILE_ROWS, topLeftCell:'B9' };
 
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, 'Sadhana_Weekly');
@@ -183,15 +356,15 @@ window.downloadMasterReport = async () => {
         userData.forEach(({user,entries}) => {
             const row = [user.name, user.level||'Senior Batch', user.chantingCategory||'Level-1'];
             allWeeks.forEach(wl => {
-                const yr = parseInt(wl.split('_')[1]);
-                const pts = wl.split(' to ')[0].split(' ');
+                const yr   = parseInt(wl.split('_')[1]);
+                const pts  = wl.split(' to ')[0].split(' ');
                 const wSun = new Date(yr, MON[pts[1]], parseInt(pts[0]));
                 let tot = 0;
                 for (let i=0;i<7;i++) {
-                    const c=new Date(wSun); c.setDate(c.getDate()+i);
-                    const ds=c.toISOString().split('T')[0];
-                    const en=entries.find(e=>e.date===ds);
-                    tot+=en?en.score:-35;
+                    const c  = new Date(wSun); c.setDate(c.getDate()+i);
+                    const ds = c.toISOString().split('T')[0];
+                    const en = entries.find(e=>e.date===ds);
+                    tot += en ? en.score : -35;
                 }
                 row.push(Math.round((tot/1120)*100)+'%');
             });
@@ -215,7 +388,6 @@ auth.onAuthStateChanged(async (user) => {
         const docSnap = await db.collection('users').doc(user.uid).get();
         if (docSnap.exists) {
             userProfile = docSnap.data();
-            // If profile incomplete (no level set), send to profile page
             if (!userProfile.level) {
                 document.getElementById('profile-title').textContent    = 'Complete Your Profile';
                 document.getElementById('profile-subtitle').textContent = 'Please fill in your details to continue';
@@ -256,7 +428,7 @@ window.switchTab = (t) => {
     if (btn) btn.classList.add('active');
 
     if (t === 'reports')  loadReports(currentUser.uid, 'weekly-reports-container');
-    if (t === 'progress') { loadMyProgressChart('daily'); }
+    if (t === 'progress') loadMyProgressChart('daily');
     if (t === 'admin' && isAnyAdmin()) loadAdminPanel();
 };
 
@@ -296,16 +468,51 @@ function loadReports(userId, containerId) {
                 const wk = weeks[wi.label]; let curr = new Date(wi.sunStr);
                 for (let i=0;i<7;i++) {
                     const ds = curr.toISOString().split('T')[0];
-                   if (ds>=APP_START && isPastDate(ds) && !wk.data.find(e=>e.id===ds)) { const nr=getNRData(ds); wk.data.push(nr); wk.total+=nr.totalScore; }
+                    if (ds>=APP_START && isPastDate(ds) && !wk.data.find(e=>e.id===ds)) {
+                        const nr=getNRData(ds); wk.data.push(nr); wk.total+=nr.totalScore;
+                    }
                     curr.setDate(curr.getDate()+1);
                 }
             });
 
             container.innerHTML = '';
             weeksList.forEach(wi => {
-                const wk  = weeks[wi.label];
-                const div = document.createElement('div'); div.className='week-card';
-               const bodyId = containerId.replace(/[^a-zA-Z0-9]/g,'') + '-wb-' + wi.sunStr;
+                const wk     = weeks[wi.label];
+                const div    = document.createElement('div'); div.className='week-card';
+                const bodyId = containerId.replace(/[^a-zA-Z0-9]/g,'') + '-wb-' + wi.sunStr;
+
+                // Build table rows — include edit button for super admin in modal
+                const rowsHtml = wk.data.sort((a,b)=>b.id.localeCompare(a.id)).map(e => {
+                    const isNR  = e.sleepTime === 'NR';
+                    const rs    = isNR ? 'style="background:#fff5f5;"' : '';
+                    const cs    = v => v<0 ? 'style="color:#dc2626;font-weight:700;"' : '';
+                    // Edited badge — show only if this entry was edited
+                    const editedBadge = e.editedAt
+                        ? `<span class="edited-badge" onclick="showEditHistory(event,'${e.id}','${userId}')" title="View edit history">✏️</span>`
+                        : '';
+                    // Edit button — only super admin, only in admin modal context
+                    const editBtn = isSuperAdmin()
+                        ? `<button onclick="openEditModal('${userId}','${e.id}')" class="btn-edit-cell" title="Edit this entry">Edit</button>`
+                        : '';
+                    return `<tr ${rs}>
+                        <td>${e.id.split('-').slice(1).join('/')}${editedBadge}</td>
+                        <td>${e.sleepTime||'NR'}</td><td ${cs(e.scores?.sleep??0)}>${e.scores?.sleep??0}</td>
+                        <td>${e.wakeupTime||'NR'}</td><td ${cs(e.scores?.wakeup??0)}>${e.scores?.wakeup??0}</td>
+                        <td>${e.chantingTime||'NR'}</td><td ${cs(e.scores?.chanting??0)}>${e.scores?.chanting??0}</td>
+                        <td>${e.readingMinutes||0}m</td><td ${cs(e.scores?.reading??0)}>${e.scores?.reading??0}</td>
+                        <td>${e.hearingMinutes||0}m</td><td ${cs(e.scores?.hearing??0)}>${e.scores?.hearing??0}</td>
+                        <td>${e.serviceMinutes||0}m</td><td ${cs(e.scores?.service??0)}>${e.scores?.service??0}</td>
+                        <td>${e.notesMinutes||0}m</td><td ${cs(e.scores?.notes??0)}>${e.scores?.notes??0}</td>
+                        <td>${e.daySleepMinutes||0}m</td><td ${cs(e.scores?.daySleep??0)}>${e.scores?.daySleep??0}</td>
+                        <td ${cs(e.totalScore??0)}>${e.totalScore??0}</td>
+                        <td>${e.dayPercent??0}%</td>
+                        ${isSuperAdmin() ? `<td style="padding:2px 4px;">${editBtn}</td>` : ''}
+                    </tr>`;
+                }).join('');
+
+                // Extra header col for edit button
+                const editThCol = isSuperAdmin() ? '<th></th>' : '';
+
                 div.innerHTML = `
                     <div class="week-header" onclick="document.getElementById('${bodyId}').classList.toggle('open')">
                         <span>📅 ${wk.range}</span>
@@ -313,24 +520,13 @@ function loadReports(userId, containerId) {
                     </div>
                     <div class="week-body" id="${bodyId}">
                         <table class="data-table">
-                        <thead><tr><th>Date</th><th>Bed</th><th>M</th><th>Wake</th><th>M</th><th>Chant</th><th>M</th>
+                        <thead><tr>
+                            <th>Date</th><th>Bed</th><th>M</th><th>Wake</th><th>M</th><th>Chant</th><th>M</th>
                             <th>Read</th><th>M</th><th>Hear</th><th>M</th><th>Seva</th><th>M</th>
-                            <th>Notes</th><th>M</th><th>Day Sleep</th><th>M</th><th>Total</th><th>%</th></tr></thead>
-                        <tbody>${wk.data.sort((a,b)=>b.id.localeCompare(a.id)).map(e=>{
-                            const nr = e.sleepTime==='NR';
-                            const rs = nr?'style="background:#fff5f5;color:#dc2626;"':'';
-                            const cs = v=>v<0?'style="color:#dc2626;font-weight:700;"':'';
-                            return `<tr ${rs}><td>${e.id.split('-').slice(1).join('/')}</td>
-                                <td>${e.sleepTime}</td><td ${cs(e.scores?.sleep??0)}>${e.scores?.sleep??0}</td>
-                                <td>${e.wakeupTime}</td><td ${cs(e.scores?.wakeup??0)}>${e.scores?.wakeup??0}</td>
-                                <td>${e.chantingTime}</td><td ${cs(e.scores?.chanting??0)}>${e.scores?.chanting??0}</td>
-                                <td>${e.readingMinutes||0}m</td><td ${cs(e.scores?.reading??0)}>${e.scores?.reading??0}</td>
-                                <td>${e.hearingMinutes||0}m</td><td ${cs(e.scores?.hearing??0)}>${e.scores?.hearing??0}</td>
-                                <td>${e.serviceMinutes||0}m</td><td ${cs(e.scores?.service??0)}>${e.scores?.service??0}</td>
-                                <td>${e.notesMinutes||0}m</td><td ${cs(e.scores?.notes??0)}>${e.scores?.notes??0}</td>
-                                <td>${e.daySleepMinutes||0}m</td><td ${cs(e.scores?.daySleep??0)}>${e.scores?.daySleep??0}</td>
-                                <td ${cs(e.totalScore??0)}>${e.totalScore??0}</td><td>${e.dayPercent??0}%</td></tr>`;
-                        }).join('')}</tbody></table>
+                            <th>Notes</th><th>M</th><th>Day Sleep</th><th>M</th><th>Total</th><th>%</th>
+                            ${editThCol}
+                        </tr></thead>
+                        <tbody>${rowsHtml}</tbody></table>
                     </div>`;
                 container.appendChild(div);
             });
@@ -340,38 +536,40 @@ function loadReports(userId, containerId) {
 // ═══════════════════════════════════════════════════════════
 // 8. PROGRESS CHARTS
 // ═══════════════════════════════════════════════════════════
-let myChartInstance = null;
+let myChartInstance    = null;
 let modalChartInstance = null;
-let progressModalUserId = null;
+let progressModalUserId   = null;
 let progressModalUserName = null;
 
 async function fetchChartData(userId, view) {
-    const snap = await db.collection('users').doc(userId).collection('sadhana').orderBy(firebase.firestore.FieldPath.documentId()).get();
+    const snap = await db.collection('users').doc(userId).collection('sadhana')
+        .orderBy(firebase.firestore.FieldPath.documentId()).get();
     const allEntries = [];
-    snap.forEach(doc => { if (doc.id >= APP_START) allEntries.push({ date: doc.id, score: doc.data().totalScore || 0 }); });
+    snap.forEach(doc => {
+        if (doc.id >= APP_START) allEntries.push({ date: doc.id, score: doc.data().totalScore || 0 });
+    });
 
     if (view === 'daily') {
-        // Last 28 days
         const labels = [], data = [];
         for (let i = 27; i >= 0; i--) {
-            const ds = localDateStr(i);
+            const ds    = localDateStr(i);
             if (ds < APP_START) continue;
             const entry = allEntries.find(e => e.date === ds);
-if (i === 0 && !entry) continue;
-labels.push(ds.split('-').slice(1).join('/'));
-data.push(entry ? entry.score : -35);
+            if (i === 0 && !entry) continue; // skip today if not yet submitted
+            labels.push(ds.split('-').slice(1).join('/'));
+            data.push(entry ? entry.score : -35);
         }
         return { labels, data, label:'Daily Score', max:160, color:'#3498db' };
     }
 
     if (view === 'weekly') {
         const labels = [], data = [];
+        const todayStr = localDateStr(0);
         for (let i = 11; i >= 0; i--) {
-            const d = new Date(); d.setDate(d.getDate() - i*7);
+            const d  = new Date(); d.setDate(d.getDate() - i*7);
             const wi = getWeekInfo(d.toISOString().split('T')[0]);
             if (wi.sunStr < APP_START) continue;
             let tot = 0; let curr = new Date(wi.sunStr);
-            const todayStr = localDateStr(0);
             for (let j=0;j<7;j++) {
                 const ds = curr.toISOString().split('T')[0];
                 if (ds > todayStr) { curr.setDate(curr.getDate()+1); continue; }
@@ -393,7 +591,10 @@ data.push(entry ? entry.score : -35);
             monthMap[ym] = (monthMap[ym]||0) + en.score;
         });
         const sorted = Object.keys(monthMap).sort();
-        const labels = sorted.map(ym => { const [y,m]=ym.split('-'); return `${new Date(y,m-1).toLocaleString('en-GB',{month:'short'})} ${y}`; });
+        const labels = sorted.map(ym => {
+            const [y,m] = ym.split('-');
+            return `${new Date(y,m-1).toLocaleString('en-GB',{month:'short'})} ${y}`;
+        });
         return { labels, data: sorted.map(k=>monthMap[k]), label:'Monthly Score', max:null, color:'#8b5cf6' };
     }
 }
@@ -422,18 +623,13 @@ function renderChart(canvasId, chartData, existingInstance) {
             maintainAspectRatio: false,
             plugins: {
                 legend: { display: false },
-                tooltip: {
-                    callbacks: {
-                        label: ctx => ` Score: ${ctx.parsed.y}${chartData.max ? ' / ' + chartData.max : ''}`
-                    }
-                }
+                tooltip: { callbacks: { label: ctx => ` Score: ${ctx.parsed.y}${chartData.max?' / '+chartData.max:''}` } }
             },
             scales: {
                 x: { ticks: { font:{size:10}, maxRotation:45 }, grid:{display:false} },
                 y: {
-                    ticks: { font:{size:11} },
-                    grid:  { color:'#f0f0f0' },
-                    suggestedMin: chartData.max ? -chartData.max * 0.15 : undefined,
+                    ticks: { font:{size:11} }, grid: { color:'#f0f0f0' },
+                    suggestedMin: chartData.max ? -chartData.max*0.15 : undefined,
                     suggestedMax: chartData.max || undefined
                 }
             }
@@ -441,7 +637,6 @@ function renderChart(canvasId, chartData, existingInstance) {
     });
 }
 
-// Personal progress tab
 async function loadMyProgressChart(view) {
     const data = await fetchChartData(currentUser.uid, view);
     myChartInstance = renderChart('my-progress-chart', data, myChartInstance);
@@ -453,7 +648,6 @@ window.setChartView = async (view, btn) => {
     await loadMyProgressChart(view);
 };
 
-// Admin progress modal
 window.openProgressModal = async (userId, userName) => {
     progressModalUserId   = userId;
     progressModalUserName = userName;
@@ -477,16 +671,16 @@ window.setModalChartView = async (view, btn) => {
 };
 
 // ═══════════════════════════════════════════════════════════
-// 9. SADHANA FORM SCORING
+// 9. SADHANA FORM SCORING  (with sleep time warning)
 // ═══════════════════════════════════════════════════════════
 document.getElementById('sadhana-form').onsubmit = async (e) => {
     e.preventDefault();
-    const date = document.getElementById('sadhana-date').value;
+    const date  = document.getElementById('sadhana-date').value;
     const existing = await db.collection('users').doc(currentUser.uid).collection('sadhana').doc(date).get();
     if (existing.exists) { alert(`❌ Sadhana for ${date} already submitted! Contact admin for corrections.`); return; }
 
     const level = userProfile.level || 'Senior Batch';
-    const slp   = document.getElementById('sleep-time').value;
+    let slp     = document.getElementById('sleep-time').value;
     const wak   = document.getElementById('wakeup-time').value;
     const chn   = document.getElementById('chanting-time').value;
     const rMin  = parseInt(document.getElementById('reading-mins').value)||0;
@@ -495,29 +689,32 @@ document.getElementById('sadhana-form').onsubmit = async (e) => {
     const nMin  = parseInt(document.getElementById('notes-mins')?.value)||0;
     const dsMin = parseInt(document.getElementById('day-sleep-minutes').value)||0;
 
-    const sc = {sleep:-5,wakeup:-5,chanting:-5,reading:-5,hearing:-5,service:-5,notes:-5,daySleep:0};
-    const slpM = t2m(slp,true);
-    sc.sleep = slpM<=1350?25:slpM<=1355?20:slpM<=1360?15:slpM<=1365?10:slpM<=1370?5:slpM<=1375?0:-5;
-    const wakM = t2m(wak);
-    sc.wakeup = wakM<=305?25:wakM<=310?20:wakM<=315?15:wakM<=320?10:wakM<=325?5:wakM<=330?0:-5;
-    const chnM = t2m(chn);
-    sc.chanting = chnM<=540?25:chnM<=570?20:chnM<=660?15:chnM<=870?10:chnM<=1020?5:chnM<=1140?0:-5;
-    sc.daySleep = dsMin<=60?10:-5;
+    // ── Sleep time sanity check ──────────────────────────
+    // If sleep time is between 04:00–20:00 it's likely a mistake (meant to enter night time)
+    if (slp) {
+        const [sh] = slp.split(':').map(Number);
+        if (sh >= 4 && sh <= 20) {
+            const goAhead = confirm(
+                `⚠️ Bed Time Warning\n\n` +
+                `You entered "${slp}" as bed time.\n` +
+                `This looks like a daytime hour.\n\n` +
+                `Did you mean night time? e.g. 23:00 instead of 11:00?\n\n` +
+                `Tap OK if "${slp}" is correct.\n` +
+                `Tap Cancel to go back and fix it.`
+            );
+            if (!goAhead) return;
+        }
+    }
 
-    const act=(m,thr)=>m>=thr?25:m>=thr-10?20:m>=20?15:m>=15?10:m>=10?5:m>=5?0:-5;
-    const isSB = level==='Senior Batch';
-    sc.reading=act(rMin,isSB?40:30); sc.hearing=act(hMin,isSB?40:30);
-    let total=sc.sleep+sc.wakeup+sc.chanting+sc.reading+sc.hearing+sc.daySleep;
+    const { sc, total, dayPercent } = calculateScores(slp, wak, chn, rMin, hMin, sMin, nMin, dsMin, level);
 
-    if (isSB) { sc.service=sMin>=15?10:sMin>=10?5:sMin>=5?0:-5; sc.notes=nMin>=20?15:nMin>=15?10:nMin>=10?5:nMin>=5?0:-5; total+=sc.service+sc.notes; }
-    else       { sc.service=act(sMin,30); sc.notes=0; total+=sc.service; }
-
-    const dayPercent=Math.round((total/160)*100);
     await db.collection('users').doc(currentUser.uid).collection('sadhana').doc(date).set({
-        sleepTime:slp,wakeupTime:wak,chantingTime:chn,
-        readingMinutes:rMin,hearingMinutes:hMin,serviceMinutes:sMin,notesMinutes:nMin,daySleepMinutes:dsMin,
-        scores:sc,totalScore:total,dayPercent,levelAtSubmission:level,
-        submittedAt:firebase.firestore.FieldValue.serverTimestamp()
+        sleepTime:slp, wakeupTime:wak, chantingTime:chn,
+        readingMinutes:rMin, hearingMinutes:hMin, serviceMinutes:sMin,
+        notesMinutes:nMin, daySleepMinutes:dsMin,
+        scores:sc, totalScore:total, dayPercent,
+        levelAtSubmission:level,
+        submittedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
     alert(`✅ Submitted! Score: ${total} (${dayPercent}%)`);
     switchTab('reports');
@@ -533,16 +730,18 @@ async function loadAdminPanel() {
     usersList.innerHTML = '<p style="color:#aaa;text-align:center;padding:20px;">Loading…</p>';
 
     const weeks = [];
-    for (let i=0;i<4;i++) { const d=new Date(); d.setDate(d.getDate()-i*7); weeks.push(getWeekInfo(d.toISOString().split('T')[0])); }
+    for (let i=0;i<4;i++) {
+        const d=new Date(); d.setDate(d.getDate()-i*7);
+        weeks.push(getWeekInfo(d.toISOString().split('T')[0]));
+    }
     weeks.reverse();
 
     const usersSnap = await db.collection('users').get();
-    const cats = visibleCategories();
-    const filtered = usersSnap.docs
+    const cats      = visibleCategories();
+    const filtered  = usersSnap.docs
         .filter(doc => cats.includes(doc.data().level||'Senior Batch'))
-        .sort((a,b)=>(a.data().name||'').localeCompare(b.data().name||''));
+        .sort((a,b) => (a.data().name||'').localeCompare(b.data().name||''));
 
-    // Comparative table
     let tHtml = `<table class="data-table"><thead><tr>
         <th style="text-align:left;min-width:100px">User</th>
         <th>Level</th><th>Chanting</th>
@@ -551,7 +750,6 @@ async function loadAdminPanel() {
 
     usersList.innerHTML = '';
 
-    // Banner
     const banner = document.createElement('div');
     banner.className = `info-banner ${isSuperAdmin()?'banner-purple':'banner-blue'}`;
     banner.innerHTML = isSuperAdmin()
@@ -562,22 +760,25 @@ async function loadAdminPanel() {
     for (const uDoc of filtered) {
         const u     = uDoc.data();
         const sSnap = await uDoc.ref.collection('sadhana').get();
-        const ents  = sSnap.docs.map(d=>({date:d.id,score:d.data().totalScore||0}));
+        const ents  = sSnap.docs.map(d=>({date:d.id, score:d.data().totalScore||0}));
 
-        // Table row
         tHtml += `<tr>
             <td style="font-weight:600">${u.name}</td>
             <td style="font-size:11px">${(u.level||'SB').replace(' Coordinator','').replace('Senior Batch','SB')}</td>
             <td style="font-size:11px">${u.chantingCategory||'N/A'}</td>`;
         weeks.forEach(w => {
             let tot=0; let curr=new Date(w.sunStr);
-            for (let i=0;i<7;i++){const ds=curr.toISOString().split('T')[0];const en=ents.find(e=>e.date===ds);tot+=en?en.score:-35;curr.setDate(curr.getDate()+1);}
+            for (let i=0;i<7;i++) {
+                const ds=curr.toISOString().split('T')[0];
+                const en=ents.find(e=>e.date===ds);
+                tot+=en?en.score:-35;
+                curr.setDate(curr.getDate()+1);
+            }
             const pct=Math.round((tot/1120)*100);
             tHtml+=`<td style="font-weight:700;color:${pct<0?'#dc2626':pct<50?'#d97706':'#16a34a'}">${pct}%</td>`;
         });
         tHtml += '</tr>';
 
-        // User card
         const card = document.createElement('div');
         card.className = 'user-card';
 
@@ -587,7 +788,6 @@ async function loadAdminPanel() {
 
         const safe = (u.name||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
 
-        // Role dropdown (super admin only)
         let roleDropdown = '';
         if (isSuperAdmin()) {
             let opts = '<option value="" disabled selected>Change Role…</option>';
@@ -616,12 +816,9 @@ async function loadAdminPanel() {
                 <div class="user-meta">${u.level||'Senior Batch'} · ${u.chantingCategory||'N/A'} · ${u.exactRounds||'?'} rounds</div>
             </div>
             <div class="user-actions">
-                <button onclick="openUserModal('${uDoc.id}','${safe}')"
-                    class="btn-primary btn-sm">History</button>
-                <button onclick="downloadUserExcel('${uDoc.id}','${safe}')"
-                    class="btn-success btn-sm">Excel</button>
-                <button onclick="openProgressModal('${uDoc.id}','${safe}')"
-                    class="btn-purple btn-sm">Progress</button>
+                <button onclick="openUserModal('${uDoc.id}','${safe}')" class="btn-primary btn-sm">History</button>
+                <button onclick="downloadUserExcel('${uDoc.id}','${safe}')" class="btn-success btn-sm">Excel</button>
+                <button onclick="openProgressModal('${uDoc.id}','${safe}')" class="btn-purple btn-sm">Progress</button>
                 ${roleDropdown}
             </div>`;
         usersList.appendChild(card);
@@ -633,9 +830,9 @@ window.handleRoleDropdown = async (uid, sel) => {
     const val = sel.value; sel.value='';
     if (!val) return;
     let newRole, cat=null, msg='';
-    if (val==='superAdmin')         { newRole='superAdmin'; msg='👑 Make this user SUPER ADMIN?\nFull access to all categories.'; }
-    else if (val.startsWith('cat:')){ newRole='admin'; cat=val.slice(4); msg=`🛡️ Assign as Category Admin for:\n"${cat}"?`; }
-    else if (val==='demote')        { newRole='user'; msg='🚫 Revoke all admin access?'; }
+    if (val==='superAdmin')          { newRole='superAdmin'; msg='👑 Make this user SUPER ADMIN?\nFull access to all categories.'; }
+    else if (val.startsWith('cat:')) { newRole='admin'; cat=val.slice(4); msg=`🛡️ Assign as Category Admin for:\n"${cat}"?`; }
+    else if (val==='demote')         { newRole='user';  msg='🚫 Revoke all admin access?'; }
     else return;
     if (!confirm(msg)) return;
     if (!confirm('Final confirmation?')) return;
@@ -645,7 +842,173 @@ window.handleRoleDropdown = async (uid, sel) => {
 };
 
 // ═══════════════════════════════════════════════════════════
-// 11. DATE SELECT & PROFILE FORM
+// 11. SUPER ADMIN — EDIT SADHANA
+// ═══════════════════════════════════════════════════════════
+let editModalUserId = null;
+let editModalDate   = null;
+let editModalOriginal = null;
+
+window.openEditModal = async (userId, date) => {
+    if (!isSuperAdmin()) return;
+
+    editModalUserId = userId;
+    editModalDate   = date;
+
+    const docRef  = db.collection('users').doc(userId).collection('sadhana').doc(date);
+    const docSnap = await docRef.get();
+    if (!docSnap.exists) { alert('Entry not found.'); return; }
+
+    const d = docSnap.data();
+    editModalOriginal = { ...d }; // snapshot of original before edit
+
+    // Fetch user's level for scoring context
+    const uSnap   = await db.collection('users').doc(userId).get();
+    const uLevel  = uSnap.exists ? (uSnap.data().level || 'Senior Batch') : 'Senior Batch';
+    document.getElementById('edit-user-level').value = uLevel;
+
+    // Populate fields
+    document.getElementById('edit-sleep-time').value      = d.sleepTime      || '';
+    document.getElementById('edit-wakeup-time').value     = d.wakeupTime     || '';
+    document.getElementById('edit-chanting-time').value   = d.chantingTime   || '';
+    document.getElementById('edit-reading-mins').value    = d.readingMinutes  || 0;
+    document.getElementById('edit-hearing-mins').value    = d.hearingMinutes  || 0;
+    document.getElementById('edit-service-mins').value    = d.serviceMinutes  || 0;
+    document.getElementById('edit-notes-mins').value      = d.notesMinutes    || 0;
+    document.getElementById('edit-day-sleep-mins').value  = d.daySleepMinutes || 0;
+    document.getElementById('edit-reason').value          = '';
+
+    // Get user name from admin panel context
+    const uData = uSnap.exists ? uSnap.data() : {};
+    document.getElementById('edit-modal-title').textContent = `✏️ Edit Sadhana — ${uData.name||userId} · ${date}`;
+
+    // Show/hide notes field based on level
+    document.getElementById('edit-notes-row').classList.toggle('hidden', uLevel !== 'Senior Batch');
+
+    updateEditPreview();
+    document.getElementById('edit-sadhana-modal').classList.remove('hidden');
+};
+
+window.closeEditModal = () => {
+    document.getElementById('edit-sadhana-modal').classList.add('hidden');
+    editModalUserId = editModalDate = editModalOriginal = null;
+};
+
+window.updateEditPreview = () => {
+    const slp   = document.getElementById('edit-sleep-time').value;
+    const wak   = document.getElementById('edit-wakeup-time').value;
+    const chn   = document.getElementById('edit-chanting-time').value;
+    const rMin  = parseInt(document.getElementById('edit-reading-mins').value)||0;
+    const hMin  = parseInt(document.getElementById('edit-hearing-mins').value)||0;
+    const sMin  = parseInt(document.getElementById('edit-service-mins').value)||0;
+    const nMin  = parseInt(document.getElementById('edit-notes-mins').value)||0;
+    const dsMin = parseInt(document.getElementById('edit-day-sleep-mins').value)||0;
+    const level = document.getElementById('edit-user-level').value || 'Senior Batch';
+
+    if (!slp || !wak || !chn) return;
+    const { total, dayPercent } = calculateScores(slp, wak, chn, rMin, hMin, sMin, nMin, dsMin, level);
+    const prev = document.getElementById('edit-score-preview');
+    prev.textContent = `New Score: ${total} / 160 (${dayPercent}%)`;
+    prev.style.color = total < 0 ? '#dc2626' : total < 80 ? '#d97706' : '#16a34a';
+};
+
+window.submitEditSadhana = async () => {
+    if (!isSuperAdmin() || !editModalUserId || !editModalDate) return;
+
+    const slp   = document.getElementById('edit-sleep-time').value;
+    const wak   = document.getElementById('edit-wakeup-time').value;
+    const chn   = document.getElementById('edit-chanting-time').value;
+    const rMin  = parseInt(document.getElementById('edit-reading-mins').value)||0;
+    const hMin  = parseInt(document.getElementById('edit-hearing-mins').value)||0;
+    const sMin  = parseInt(document.getElementById('edit-service-mins').value)||0;
+    const nMin  = parseInt(document.getElementById('edit-notes-mins').value)||0;
+    const dsMin = parseInt(document.getElementById('edit-day-sleep-mins').value)||0;
+    const reason= document.getElementById('edit-reason').value.trim();
+    const level = document.getElementById('edit-user-level').value || 'Senior Batch';
+
+    if (!slp||!wak||!chn) { alert('Please fill all time fields.'); return; }
+    if (!confirm(`Save changes to ${editModalDate}?\nThis will update scores and log edit history.`)) return;
+
+    const { sc, total, dayPercent } = calculateScores(slp, wak, chn, rMin, hMin, sMin, nMin, dsMin, level);
+
+    // Build edit log entry — store original data
+    const editLog = {
+        editedBy:    userProfile.name,
+        editedByUid: currentUser.uid,
+        editedAt:    firebase.firestore.FieldValue.serverTimestamp(),
+        reason:      reason || 'No reason provided',
+        original: {
+            sleepTime:       editModalOriginal.sleepTime,
+            wakeupTime:      editModalOriginal.wakeupTime,
+            chantingTime:    editModalOriginal.chantingTime,
+            readingMinutes:  editModalOriginal.readingMinutes  || 0,
+            hearingMinutes:  editModalOriginal.hearingMinutes  || 0,
+            serviceMinutes:  editModalOriginal.serviceMinutes  || 0,
+            notesMinutes:    editModalOriginal.notesMinutes    || 0,
+            daySleepMinutes: editModalOriginal.daySleepMinutes || 0,
+            totalScore:      editModalOriginal.totalScore      || 0,
+            dayPercent:      editModalOriginal.dayPercent      || 0
+        }
+    };
+
+    await db.collection('users').doc(editModalUserId).collection('sadhana').doc(editModalDate).update({
+        sleepTime:       slp,
+        wakeupTime:      wak,
+        chantingTime:    chn,
+        readingMinutes:  rMin,
+        hearingMinutes:  hMin,
+        serviceMinutes:  sMin,
+        notesMinutes:    nMin,
+        daySleepMinutes: dsMin,
+        scores:          sc,
+        totalScore:      total,
+        dayPercent:      dayPercent,
+        editedAt:        firebase.firestore.FieldValue.serverTimestamp(),
+        editedBy:        userProfile.name,
+        editLog:         firebase.firestore.FieldValue.arrayUnion(editLog)
+    });
+
+    alert(`✅ Sadhana updated!\nNew Score: ${total} (${dayPercent}%)`);
+    closeEditModal();
+};
+
+// Show edit history tooltip/mini modal
+window.showEditHistory = async (evt, date, userId) => {
+    evt.stopPropagation();
+    const docSnap = await db.collection('users').doc(userId).collection('sadhana').doc(date).get();
+    if (!docSnap.exists) return;
+    const d   = docSnap.data();
+    const log = d.editLog || [];
+
+    if (log.length === 0) {
+        alert('No edit history found.');
+        return;
+    }
+
+    // Build history text
+    let msg = `✏️ Edit History — ${date}\n${'─'.repeat(30)}\n`;
+    log.forEach((entry, i) => {
+        const ts = entry.editedAt?.toDate
+            ? entry.editedAt.toDate().toLocaleString('en-IN', {day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})
+            : 'Unknown time';
+        msg += `\n[${i+1}] By: ${entry.editedBy || 'Admin'}\n`;
+        msg += `    On: ${ts}\n`;
+        msg += `    Reason: ${entry.reason || 'Not specified'}\n`;
+        if (entry.original) {
+            msg += `    Before: Sleep ${entry.original.sleepTime||'NR'} · Wake ${entry.original.wakeupTime||'NR'} · Score ${entry.original.totalScore||0}\n`;
+        }
+    });
+
+    // Show in edit history modal
+    document.getElementById('edit-history-content').textContent = msg;
+    document.getElementById('edit-history-modal').classList.remove('hidden');
+};
+
+window.closeEditHistoryModal = () => {
+    document.getElementById('edit-history-modal').classList.add('hidden');
+};
+
+// ═══════════════════════════════════════════════════════════
+// 12. DATE SELECT & PROFILE FORM
 // ═══════════════════════════════════════════════════════════
 function setupDateSelect() {
     const s = document.getElementById('sadhana-date');
@@ -675,7 +1038,7 @@ document.getElementById('profile-form').onsubmit = async (e) => {
 };
 
 // ═══════════════════════════════════════════════════════════
-// 12. PASSWORD MODAL
+// 13. PASSWORD MODAL
 // ═══════════════════════════════════════════════════════════
 window.openPasswordModal = () => {
     document.getElementById('pwd-new').value     = '';
@@ -690,9 +1053,9 @@ window.closePasswordModal = () => {
 window.submitPasswordChange = async () => {
     const newPwd  = document.getElementById('pwd-new').value.trim();
     const confPwd = document.getElementById('pwd-confirm').value.trim();
-    if (!newPwd)              { alert('❌ Please enter a new password.'); return; }
-    if (newPwd.length < 6)    { alert('❌ Password must be at least 6 characters.'); return; }
-    if (newPwd !== confPwd)   { alert('❌ Passwords do not match!'); return; }
+    if (!newPwd)           { alert('❌ Please enter a new password.'); return; }
+    if (newPwd.length < 6) { alert('❌ Password must be at least 6 characters.'); return; }
+    if (newPwd !== confPwd){ alert('❌ Passwords do not match!'); return; }
     if (!confirm('🔑 Confirm password change?')) return;
     try {
         await currentUser.updatePassword(newPwd);
@@ -708,7 +1071,7 @@ window.submitPasswordChange = async () => {
 };
 
 // ═══════════════════════════════════════════════════════════
-// 13. MISC BINDINGS
+// 14. MISC BINDINGS
 // ═══════════════════════════════════════════════════════════
 document.getElementById('login-form').onsubmit = (e) => {
     e.preventDefault();
@@ -725,6 +1088,7 @@ window.openUserModal = (id, name) => {
     document.getElementById('modal-user-name').textContent = `📋 ${name} — History`;
     loadReports(id, 'modal-report-container');
 };
+
 window.closeUserModal = () => {
     document.getElementById('user-report-modal').classList.add('hidden');
     if (activeListener) { activeListener(); activeListener = null; }
@@ -740,32 +1104,22 @@ window.openProfileEdit = () => {
     document.getElementById('cancel-edit').classList.remove('hidden');
     showSection('profile');
 };
+
 // ═══════════════════════════════════════════════════════════
-// FORGET PASSWORD
+// 15. FORGOT PASSWORD
 // ═══════════════════════════════════════════════════════════
 window.openForgotPassword = (e) => {
     e.preventDefault();
     const email = prompt('Enter your email address to reset password:');
     if (!email) return;
-    
-    if (!email.includes('@')) {
-        alert('❌ Please enter a valid email address!');
-        return;
-    }
-    
+    if (!email.includes('@')) { alert('❌ Please enter a valid email address!'); return; }
     if (confirm(`Send password reset email to: ${email}?`)) {
         auth.sendPasswordResetEmail(email)
-            .then(() => {
-                alert(`✅ Password reset email sent to ${email}!\n\nCheck your inbox and spam folder.\n\nClick the link in the email to reset your password.`);
-            })
-            .catch((error) => {
-                if (error.code === 'auth/user-not-found') {
-                    alert('❌ No account found with this email address!');
-                } else if (error.code === 'auth/invalid-email') {
-                    alert('❌ Invalid email format!');
-                } else {
-                    alert('❌ Error: ' + error.message);
-                }
+            .then(() => alert(`✅ Password reset email sent to ${email}!\n\nCheck your inbox and spam folder.`))
+            .catch(error => {
+                if (error.code==='auth/user-not-found') alert('❌ No account found with this email address!');
+                else if (error.code==='auth/invalid-email') alert('❌ Invalid email format!');
+                else alert('❌ Error: ' + error.message);
             });
     }
 };
