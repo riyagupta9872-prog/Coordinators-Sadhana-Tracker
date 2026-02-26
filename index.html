@@ -55,7 +55,7 @@
 
         /* Week cards */
         .week-card { background: white; margin-bottom: 10px; border-radius: 10px; border-left: 4px solid var(--secondary); box-shadow: 0 1px 6px rgba(0,0,0,0.06); overflow: hidden; }
-        .week-header { padding: 13px 16px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-weight: 600; font-size: 14px; user-select: none; }
+        .week-header { padding: 13px 16px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-weight: 600; font-size: 14px; user-select: none; gap: 10px; flex-wrap: nowrap; }
         .week-header:hover { background: #f9fafb; }
         .week-body { padding: 10px 14px; border-top: 1px solid #f0f0f0; overflow-x: auto; display: none; }
         .week-body.open { display: block; }
@@ -99,6 +99,121 @@
 
         /* Section divider in profile */
         hr.section-hr { border: none; border-top: 1px dashed #e0e0e0; margin: 20px 0; }
+
+        /* ── REPORTS PANEL — bigger font ── */
+        #weekly-reports-container .data-table,
+        #modal-report-container .data-table {
+            font-size: 13px;
+        }
+        #weekly-reports-container .data-table th,
+        #modal-report-container .data-table th {
+            font-size: 12px;
+            padding: 8px 10px;
+        }
+        #weekly-reports-container .data-table td,
+        #modal-report-container .data-table td {
+            padding: 8px 10px;
+        }
+        .week-header {
+            font-size: 14px;
+            padding: 13px 16px;
+        }
+
+        /* ── COMPARATIVE PERFORMANCE TABLE ── */
+        .comp-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+        .comp-th {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            background: #1A3C5E;
+            color: white;
+            font-weight: 700;
+            font-size: 12px;
+            padding: 10px 12px;
+            text-align: center;
+            border: 1px solid #2563a0;
+            white-space: nowrap;
+        }
+        .comp-th-name { text-align: left; min-width: 120px; }
+        .comp-td {
+            padding: 9px 12px;
+            border: 1px solid #e5e7eb;
+            text-align: center;
+            white-space: nowrap;
+            font-size: 13px;
+        }
+        .comp-name {
+            text-align: left;
+            font-weight: 700;
+            font-size: 14px;
+        }
+        .comp-meta {
+            font-size: 12px;
+            color: #6b7280;
+            text-align: left;
+        }
+        .comp-pct {
+            font-size: 14px;
+            min-width: 80px;
+        }
+
+        /* ── EDIT HISTORY MODAL — rich HTML styling ── */
+        .eh-entry {
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            margin-bottom: 14px;
+            overflow: hidden;
+        }
+        .eh-header {
+            background: #1A3C5E;
+            color: white;
+            padding: 9px 14px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        .eh-who  { color: #93c5fd; }
+        .eh-when { color: #d1d5db; font-size: 12px; }
+        .eh-reason {
+            background: #f8fafc;
+            padding: 7px 14px;
+            font-size: 12px;
+            color: #6b7280;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .eh-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        .eh-table th {
+            background: #f1f5f9;
+            padding: 7px 12px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 12px;
+            color: #374151;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .eh-table td { padding: 7px 12px; border-bottom: 1px solid #f0f0f0; }
+        .eh-field  { font-weight: 600; color: #374151; width: 35%; }
+        .eh-before { color: #b91c1c; background: #fff5f5; }
+        .eh-after  { color: #15803d; background: #f0fdf4; font-weight: 600; }
+        .eh-nochange {
+            padding: 10px 14px;
+            font-size: 12px;
+            color: #9ca3af;
+            font-style: italic;
+        }
+        /* Edit history modal content area — scrollable, no monospace */
+        #edit-history-content {
+            font-family: inherit;
+            font-size: 13px;
+            line-height: 1.5;
+        }
 
         /* ── EDIT BUTTON in table rows ── */
         .btn-edit-cell {
@@ -416,7 +531,7 @@
     <div class="modal-box sm">
         <button class="modal-close" onclick="closeEditHistoryModal()">×</button>
         <div class="modal-title">✏️ Edit History</div>
-        <pre class="edit-history-pre" id="edit-history-content"></pre>
+        <div id="edit-history-content"></div>
         <button onclick="closeEditHistoryModal()" class="btn-gray" style="margin-top:12px;">Close</button>
     </div>
 </div>
