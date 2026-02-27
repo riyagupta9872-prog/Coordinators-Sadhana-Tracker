@@ -792,10 +792,12 @@ document.getElementById('sadhana-form').onsubmit = async (e) => {
 // 10. ADMIN PANEL
 // ═══════════════════════════════════════════════════════════
 async function loadAdminPanel() {
-    const tableBox  = document.getElementById('admin-comparative-reports-container');
-    const usersList = document.getElementById('admin-users-list');
-    tableBox.innerHTML  = '<p style="color:#aaa;text-align:center;padding:20px;">Loading…</p>';
-    usersList.innerHTML = '<p style="color:#aaa;text-align:center;padding:20px;">Loading…</p>';
+    const tableBox        = document.getElementById('admin-comparative-reports-container');
+    const usersList       = document.getElementById('admin-users-list');
+    const inactiveCont    = document.getElementById('admin-inactive-container');
+    tableBox.innerHTML    = '<p style="color:#aaa;text-align:center;padding:20px;">Loading…</p>';
+    usersList.innerHTML   = '<p style="color:#aaa;text-align:center;padding:20px;">Loading…</p>';
+    if (inactiveCont) inactiveCont.innerHTML = '';
 
     const weeks = [];
     for (let i=0;i<4;i++) {
