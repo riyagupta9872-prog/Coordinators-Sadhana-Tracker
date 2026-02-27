@@ -964,7 +964,9 @@ async function loadAdminPanel() {
                 }).join('')
             }
         </div>`;
-    usersList.appendChild(inactiveSection);
+    const inactiveContainer = document.getElementById('admin-inactive-container');
+    if (inactiveContainer) inactiveContainer.innerHTML = '';
+    if (inactiveContainer) inactiveContainer.appendChild(inactiveSection);
 
     tableBox.innerHTML = tHtml + '</tbody></table>';
 }
