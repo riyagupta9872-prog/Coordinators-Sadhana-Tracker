@@ -46,8 +46,9 @@
         .header-btns { display: flex; gap: 6px; flex-wrap: wrap; }
 
         /* Nav tabs */
-        .nav-tabs { display: flex; gap: 7px; margin-bottom: 18px; flex-wrap: wrap; }
-        .tab-btn { background: #e9ecef; color: #555; padding: 8px 16px; border-radius: 20px; width: auto; font-size: 13px; margin: 0; }
+        .nav-tabs { display: flex; gap: 7px; margin-bottom: 18px; overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; scrollbar-width: none; padding-bottom: 2px; }
+        .nav-tabs::-webkit-scrollbar { display: none; }
+        .tab-btn { background: #e9ecef; color: #555; padding: 8px 16px; border-radius: 20px; width: auto; font-size: 13px; margin: 0; white-space: nowrap; flex-shrink: 0; }
         .tab-btn.active { background: var(--secondary); color: white; }
 
         /* Tab panels */
@@ -350,7 +351,8 @@
 
     <!-- ══ AUTH ══ -->
     <section id="auth-section" class="card">
-        <h2 style="text-align:center;margin-bottom:20px;color:var(--primary);">🙏 Sadhana Tracker</h2>
+        <h2 style="text-align:center;margin-bottom:4px;color:var(--primary);">🙏 Sadhana Tracker</h2>
+        <p style="text-align:center;margin-bottom:20px;font-size:12px;color:#9ca3af;font-style:italic;letter-spacing:0.4px;">Dedicated to Guru and Gauranga</p>
         <form id="login-form">
             <input type="email"    id="login-email"    placeholder="Email" required>
             <input type="password" id="login-password" placeholder="Password" required>
@@ -493,6 +495,7 @@
                 <h3 style="margin:0 0 12px;color:var(--primary);font-size:15px;">4-Week Performance (%)</h3>
                 <div id="admin-comparative-reports-container"></div>
             </div>
+            <div id="admin-inactive-container"></div>
             <div class="card">
                 <h3 style="margin:0 0 12px;color:var(--primary);font-size:15px;">User Management</h3>
                 <div id="admin-users-list"></div>
