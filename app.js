@@ -840,53 +840,9 @@ async function loadAdminPanel() {
     const inactiveDays = [];
     for (let i = 1; i <= 4; i++) inactiveDays.push(localDateStr(i));
 
-    // We will compute inactive list INSIDE the main user loop below (to avoid double Firestore reads)
+    // Inactive list will be populated inside main user loop below
     const inactiveUsers = [];
     const userSadhanaCache = new Map(); // uid → entries array (reuse in comparative table)
-
-    // Sort A to Z
-    inactiveUsers.sort((a,b) => (a.name||'').localeCompare(b.name||''));
-
-    // Build inactive section
-    const inactiveSection = document.createElement('div');
-    inactiveSection.className = 'inactive-section';
-    const count = inactiveUsers.length;
-    const countBadge = count > 0
-        ? `<span class="inactive-badge">${count}</span>`
-        : `<span class="inactive-badge inactive-badge-zero">0</span>`;
-
-    inactiveSection.innerHTML = `
-        <div class="inactive-header" onclick="this.parentElement.classList.toggle('open')">
-            <span>⚠️ Inactive Devotees ${countBadge}
-                <small style="font-weight:400;color:#9ca3af;font-size:11px;margin-left:6px;">(4 consecutive days missing)</small>
-            </span>
-            <span class="inactive-arrow">▼</span>
-        </div>
-        <div class="inactive-body">
-            ${count === 0
-                ? `<div class="inactive-empty">✅ All devotees are up to date!</div>`
-                : inactiveUsers.map(u => {
-                    const lastTxt = u.lastDate
-                        ? `Last entry: ${u.lastDate.split('-').slice(1).join(' ')}`
-                        : 'No entries yet';
-                    const safe = (u.name||'').replace(/'/g,"\'");
-                    return `<div class="inactive-card">
-                        <div class="inactive-card-left">
-                            <span class="inactive-dot">🔴</span>
-                            <div>
-                                <div class="inactive-name">${u.name}</div>
-                                <div class="inactive-meta">${u.level||'Senior Batch'} · ${lastTxt}</div>
-                            </div>
-                        </div>
-                        <div class="inactive-actions">
-                            <button onclick="openUserModal('${u.id}','${safe}')" class="btn-primary btn-sm">History</button>
-                            <button onclick="downloadUserExcel('${u.id}','${safe}')" class="btn-success btn-sm">Excel</button>
-                        </div>
-                    </div>`;
-                }).join('')
-            }
-        </div>`;
-    usersList.appendChild(inactiveSection);
 
     for (const uDoc of filtered) {
         const u     = uDoc.data();
@@ -968,6 +924,48 @@ async function loadAdminPanel() {
             </div>`;
         usersList.appendChild(card);
     }
+    // ── Now build inactive section (inactiveUsers is fully populated) ──
+    inactiveUsers.sort((a,b) => (a.name||'').localeCompare(b.name||''));
+    const inactiveSection = document.createElement('div');
+    inactiveSection.className = 'inactive-section';
+    const count = inactiveUsers.length;
+    const countBadge = count > 0
+        ? `<span class="inactive-badge">${count}</span>`
+        : `<span class="inactive-badge inactive-badge-zero">0</span>`;
+
+    inactiveSection.innerHTML = `
+        <div class="inactive-header" onclick="this.parentElement.classList.toggle('open')">
+            <span>⚠️ Inactive Devotees ${countBadge}
+                <small style="font-weight:400;color:#9ca3af;font-size:11px;margin-left:6px;">(4 consecutive days missing)</small>
+            </span>
+            <span class="inactive-arrow">▼</span>
+        </div>
+        <div class="inactive-body">
+            ${count === 0
+                ? `<div class="inactive-empty">✅ All devotees are up to date!</div>`
+                : inactiveUsers.map(u => {
+                    const lastTxt = u.lastDate
+                        ? `Last entry: ${u.lastDate.split('-').slice(1).join(' ')}`
+                        : 'No entries yet';
+                    const safe = (u.name||'').replace(/'/g,"\'");
+                    return `<div class="inactive-card">
+                        <div class="inactive-card-left">
+                            <span class="inactive-dot">🔴</span>
+                            <div>
+                                <div class="inactive-name">${u.name}</div>
+                                <div class="inactive-meta">${u.level||'Senior Batch'} · ${lastTxt}</div>
+                            </div>
+                        </div>
+                        <div class="inactive-actions">
+                            <button onclick="openUserModal('${u.id}','${safe}')" class="btn-primary btn-sm">History</button>
+                            <button onclick="downloadUserExcel('${u.id}','${safe}')" class="btn-success btn-sm">Excel</button>
+                        </div>
+                    </div>`;
+                }).join('')
+            }
+        </div>`;
+    usersList.appendChild(inactiveSection);
+
     tableBox.innerHTML = tHtml + '</tbody></table>';
 }
 
